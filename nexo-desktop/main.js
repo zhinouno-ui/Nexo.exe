@@ -58,6 +58,7 @@ function sendUpdaterStatus(status, payload = {}) {
 
 function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('checking-for-update', () => sendUpdaterStatus('checking'));
   autoUpdater.on('update-available', (info) => {
@@ -155,8 +156,12 @@ ipcMain.handle('external:open', async (_event, url) => {
   return true;
 });
 ipcMain.handle('updater:check', async () => {
+  if (!app.isPackaged) {
+    sendUpdaterStatus('error', { message: 'Auto-update solo funciona en app instalada (NSIS), no en modo desarrollo.' });
+    return { ok: false, message: 'Not packaged' };
+  }
   try {
-    await autoUpdater.checkForUpdates();
+    await autoUpdater.checkForUpdatesAndNotify();
     return { ok: true };
   } catch (error) {
     const message = error?.message || String(error);
@@ -172,7 +177,9 @@ ipcMain.handle('updater:install', async () => {
 app.whenReady().then(async () => {
   createWindow();
   setupAutoUpdater();
-  try {
+  if (!app.isPackaged) {
+    sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
+  } else try {
     await autoUpdater.checkForUpdatesAndNotify();
   } catch (error) {
     sendUpdaterStatus('error', { message: `Error de actualización: ${error?.message || error}` });

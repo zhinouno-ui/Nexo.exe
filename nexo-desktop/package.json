@@ -1,13 +1,14 @@
 {
   "name": "nexo-desktop",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Nexo desktop app built with Electron",
   "main": "main.js",
   "author": "",
   "license": "MIT",
   "scripts": {
     "dev": "electron .",
-    "dist": "electron-builder --publish never"
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win nsis --publish never"
   },
   "devDependencies": {
     "electron": "^31.0.2",
@@ -28,8 +29,9 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "YOUR_GITHUB_OWNER",
-        "repo": "Nexo.exe"
+        "owner": "REEMPLAZAR_OWNER",
+        "repo": "Nexo.exe",
+        "releaseType": "release"
       }
     ],
     "win": {
@@ -37,6 +39,11 @@
         "nsis",
         "portable"
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }
