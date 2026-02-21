@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -11,6 +12,8 @@ const DEFAULT_DB = {
   backups: {},
   extraStorage: {}
 };
+
+let mainWindow = null;
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
@@ -35,8 +38,7 @@ async function readDb() {
 
 async function writeDb(data) {
   const dbPath = getDbPath();
-  const dir = path.dirname(dbPath);
-  await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(path.dirname(dbPath), { recursive: true });
   const tmpPath = `${dbPath}.tmp`;
   const payload = JSON.stringify({ ...DEFAULT_DB, ...data }, null, 2);
   await fs.writeFile(tmpPath, payload, 'utf8');
@@ -49,8 +51,46 @@ function queueWrite(data) {
   return writeQueue;
 }
 
+function sendUpdaterStatus(status, payload = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('updater:status', { status, ...payload });
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = true;
+
+  autoUpdater.on('checking-for-update', () => sendUpdaterStatus('checking'));
+  autoUpdater.on('update-available', (info) => {
+    sendUpdaterStatus('available', {
+      version: info?.version || '',
+      message: 'Descargando actualización…'
+    });
+  });
+  autoUpdater.on('update-not-available', (info) => {
+    sendUpdaterStatus('not-available', {
+      version: info?.version || app.getVersion(),
+      message: 'Estás en la última versión'
+    });
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    sendUpdaterStatus('download-progress', {
+      percent: Math.round(progress?.percent || 0)
+    });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    sendUpdaterStatus('downloaded', {
+      version: info?.version || '',
+      message: 'Actualización lista. Reiniciar ahora'
+    });
+  });
+  autoUpdater.on('error', (error) => {
+    const readable = error?.message || String(error);
+    sendUpdaterStatus('error', { message: `Error de actualización: ${readable}` });
+  });
+}
+
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -61,7 +101,22 @@ function createWindow() {
     }
   });
 
-  win.loadFile(path.join(__dirname, 'renderer', 'nexo.html'));
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/whatsapp\.com|wa\.me/i.test(url)) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (/whatsapp\.com|wa\.me/i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'nexo.html'));
 }
 
 ipcMain.handle('store:getAll', async () => readDb());
@@ -71,10 +126,7 @@ ipcMain.handle('store:setAll', async (_event, data) => {
 });
 ipcMain.handle('store:patch', async (_event, partial) => {
   const current = await readDb();
-  const next = {
-    ...current,
-    ...(partial && typeof partial === 'object' ? partial : {})
-  };
+  const next = { ...current, ...(partial && typeof partial === 'object' ? partial : {}) };
   await queueWrite(next);
   return readDb();
 });
@@ -93,14 +145,38 @@ ipcMain.handle('app:exportBackup', async () => {
     defaultPath: `nexo-db-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: 'JSON', extensions: ['json'] }]
   });
-
   if (target.canceled || !target.filePath) return { canceled: true };
   await fs.copyFile(getDbPath(), target.filePath);
   return { canceled: false, filePath: target.filePath };
 });
+ipcMain.handle('external:open', async (_event, url) => {
+  if (!url || typeof url !== 'string') throw new Error('URL inválida');
+  await shell.openExternal(url);
+  return true;
+});
+ipcMain.handle('updater:check', async () => {
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (error) {
+    const message = error?.message || String(error);
+    sendUpdaterStatus('error', { message: `Error de actualización: ${message}` });
+    return { ok: false, message };
+  }
+});
+ipcMain.handle('updater:install', async () => {
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
+  return { ok: true };
+});
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
+  setupAutoUpdater();
+  try {
+    await autoUpdater.checkForUpdatesAndNotify();
+  } catch (error) {
+    sendUpdaterStatus('error', { message: `Error de actualización: ${error?.message || error}` });
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

@@ -8,3 +8,14 @@ contextBridge.exposeInMainWorld('nexoStore', {
   openDataFolder: () => ipcRenderer.invoke('app:openDataFolder'),
   exportBackup: () => ipcRenderer.invoke('app:exportBackup')
 });
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  openExternal: (url) => ipcRenderer.invoke('external:open', url),
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  installUpdate: () => ipcRenderer.invoke('updater:install'),
+  onUpdaterStatus: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('updater:status', listener);
+    return () => ipcRenderer.removeListener('updater:status', listener);
+  }
+});
