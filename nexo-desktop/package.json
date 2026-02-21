@@ -20,7 +20,7 @@
   "build": {
     "appId": "com.nexo.desktop",
     "productName": "Nexo",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "${productName}-${version}-${os}-${arch}-${target}.${ext}",
     "files": [
       "main.js",
       "preload.js",
@@ -36,7 +36,8 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        "nsis",
+        "portable"
       ]
     },
     "nsis": {
