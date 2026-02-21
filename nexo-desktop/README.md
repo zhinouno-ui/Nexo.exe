@@ -34,12 +34,12 @@ Ruta real obtenida con `app.getPath("userData")`.
 ## Actualizaciones automáticas (GitHub Releases)
 
 - Se usa `electron-updater` con `build.publish.provider = github`.
-- La app busca updates al iniciar y también desde **Ajustes → Buscar actualizaciones**.
+- La app busca updates al iniciar y también desde el botón visible **Buscar updates** (barra superior) o **Ajustes → Buscar actualizaciones**.
 - Al descargar update muestra estado y habilita **Reiniciar y actualizar**.
 
 ### Flujo de release
 
-1. Subir versión en `package.json` (ej. `1.1.0`).
+1. Subir versión en `package.json` (ej. `1.1.1`).
 2. Ejecutar `npm run dist`.
 3. Crear GitHub Release con tag `vX.Y.Z`.
 4. Subir artefactos generados en `dist/` (incluyendo `latest.yml` y `.exe`).

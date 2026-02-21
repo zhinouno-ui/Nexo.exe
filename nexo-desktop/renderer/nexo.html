@@ -1376,6 +1376,7 @@
                 <button id="exportBtn" class="btn"><i class="fas fa-download"></i> Exportar</button>
                 <button id="historyBtn" class="btn"><i class="fas fa-history"></i> Historial</button>
                 <button id="manageDuplicatesBtn" class="btn btn-warning"><i class="fas fa-clone"></i> Duplicados</button>
+                <button id="checkUpdatesBtn" class="btn"><i class="fas fa-cloud-download-alt"></i> Buscar updates</button>
                 <button id="settingsBtn" class="btn"><i class="fas fa-cog"></i> Ajustes</button>
                 <button id="importOpsBtn" class="btn" title="Importar agent_operations.csv"><i class="fas fa-chart-line"></i> Operaciones</button>
                 <button id="deleteAllBtn" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Borrar Todo</button>
@@ -1892,6 +1893,7 @@
             duplicatesStatBox: $('#duplicatesStatBox'),
             addMoreBtn: $('#addMoreBtn'),
             addSingleBtn: $('#addSingleBtn'),
+            checkUpdatesBtn: $('#checkUpdatesBtn'),
             settingsBtn: $('#settingsBtn'),
             historyBtn: $('#historyBtn'),
             historyModal: $('#historyModal'),
@@ -3624,15 +3626,10 @@
         }
 
         function getShiftStats(shift) {
-            const pendingPool = AppState.contacts.filter(c => c.assignedShift === shift && !c.shiftReviewed);
-            const total = pendingPool.length;
-
-            // Conteo competitivo por franja local (turno real de trabajo), sin toggle estricto.
-            const revisados = AppState.contacts.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift).length;
-
-            const pendientes = total;
-            const denom = revisados + pendientes;
-            const pct = denom ? Math.min(100, Math.round((revisados / denom) * 100)) : 0;
+            const pendientes = AppState.contacts.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
+            const revisados = AppState.contacts.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
+            const total = revisados + pendientes;
+            const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
             return { total, revisados, pendientes, pct };
         }
 
@@ -3735,17 +3732,9 @@
         }
 
         function getShiftStats(shift) {
-            const assigned = AppState.contacts.filter(c => c.assignedShift === shift);
-            const total = assigned.length;
-
-            // Conteo de competencia por franja local: prevalece el horario de edición sobre turno asignado.
-            // Esto evita "robo" de conteo entre turnos por trabajar contactos de otra cola fuera de horario.
-            const revisadosByLocalShift = AppState.contacts.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift).length;
-            const revisados = AppState.turnosStrictProgress
-                ? revisadosByLocalShift
-                : AppState.contacts.filter(c => c.status && c.status !== 'sin revisar' && c.shiftReviewedByShift === shift).length;
-
-            const pendientes = Math.max(0, total - revisados);
+            const pendientes = AppState.contacts.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
+            const revisados = AppState.contacts.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
+            const total = revisados + pendientes;
             const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
             return { total, revisados, pendientes, pct };
         }
@@ -3803,7 +3792,7 @@
 
             const strictCard = `
                 <div class="shift-card strict-mode-card">
-                    <div class="strict-mode-title">Modo estricto de progreso</div>
+                    <div class="strict-mode-title">Progreso por cola sin revisar</div>
                     <div class="strict-mode-desc">El conteo competitivo ahora siempre respeta el <strong>horario local</strong> (TM/TT/TN):
                     si trabajás usuarios de otro turno, el crédito pasa automáticamente a tu franja actual.</div>
                     <label class="strict-toggle">
@@ -3848,8 +3837,8 @@
 
         function buildShiftQueue(shift) {
             return AppState.contacts
-                .filter(c => c.assignedShift === shift)
-                .sort((a,b) => (a.status === 'sin revisar' ? -1 : 1) - (b.status === 'sin revisar' ? -1 : 1));
+                .filter(c => c.assignedShift === shift && c.status === 'sin revisar')
+                .sort((a, b) => (new Date(a.lastUpdated || 0).getTime()) - (new Date(b.lastUpdated || 0).getTime()));
         }
 
         window.startShiftReview = (shift) => {
@@ -3905,7 +3894,7 @@
                             ${STATUS_OPTIONS.map(opt => `<button class="btn ${opt.id===contact.status?'btn-success':''}" onclick="reviewSetStatus(${contact.id}, '${opt.id}')"><i class="fas ${opt.icon}"></i> ${opt.label}</button>`).join('')}
                         </div>
                         <div class="quick-tools">
-                            <button class="btn" onclick="reviewPrev()"><i class="fas fa-arrow-left"></i> Anterior</button>
+                            <button class="btn" onclick="reviewPrev()" title="Deshabilitado para mantener consistencia de cola"><i class="fas fa-lock"></i> Sin retroceso</button>
                             <button class="btn" onclick="reviewSkip()"><i class="fas fa-forward"></i> Saltar</button>
                             <button class="btn" onclick="copyToClipboard('${escapedName}')"><i class="fas fa-copy"></i> Copiar usuario</button>
                             ${contact.phone ? `<button class="btn" onclick="copyToClipboard('${escapedPhone}')"><i class="fas fa-copy"></i> Copiar teléfono</button>` : ''}
@@ -3931,14 +3920,7 @@
         };
 
         window.reviewPrev = () => {
-            const shift = AppState.activeShift;
-            if (!shift) return;
-            const mode = AppState.shiftMode[shift];
-            const prevId = mode.stack.pop();
-            if (!prevId) return;
-            const idx = mode.queue.findIndex(c => c.id === prevId);
-            mode.cursor = idx >= 0 ? idx : 0;
-            renderQuickReview();
+            showNotification('Retroceso deshabilitado en modo competencia para no romper la cola', 'warning');
         };
 
         window.reviewSkip = () => {
@@ -3981,7 +3963,7 @@
 
         function buildShiftQueue(shift) {
             return AppState.contacts
-                .filter(c => c.assignedShift === shift && !c.shiftReviewed)
+                .filter(c => c.assignedShift === shift && c.status === 'sin revisar')
                 .sort((a, b) => (new Date(a.lastUpdated || 0).getTime()) - (new Date(b.lastUpdated || 0).getTime()));
         }
 
@@ -4039,7 +4021,7 @@
                             ${STATUS_OPTIONS.map(opt => `<button class="btn quick-status-btn ${opt.id.replace(/ /g,'-')}" onclick="reviewSetStatus(${contact.id}, '${opt.id}', event)"><i class="fas ${opt.icon}"></i> ${opt.label}</button>`).join('')}
                         </div>
                         <div class="quick-tools">
-                            <button class="btn" onclick="reviewPrev()"><i class="fas fa-arrow-left"></i> Anterior</button>
+                            <button class="btn" onclick="reviewPrev()" title="Deshabilitado para mantener consistencia de cola"><i class="fas fa-lock"></i> Sin retroceso</button>
                             <button class="btn" onclick="reviewSkip()"><i class="fas fa-forward"></i> Saltar</button>
                             <button class="btn" onclick="copyToClipboard('${escapedName}')"><i class="fas fa-copy"></i> Copiar usuario</button>
                             ${contact.phone ? `<button class="btn" onclick="copyToClipboard('${escapedPhone}')"><i class="fas fa-copy"></i> Copiar teléfono</button>` : ''}
@@ -4071,14 +4053,7 @@
         };
 
         window.reviewPrev = () => {
-            const shift = AppState.activeShift;
-            if (!shift) return;
-            const mode = AppState.shiftMode[shift];
-            const prevId = mode.stack.pop();
-            if (!prevId) return;
-            const idx = mode.queue.findIndex(c => c.id === prevId);
-            mode.cursor = idx >= 0 ? idx : 0;
-            renderQuickReview();
+            showNotification('Retroceso deshabilitado en modo competencia para no romper la cola', 'warning');
         };
 
         window.reviewSkip = () => {
@@ -5013,6 +4988,13 @@
             elements.settingsBtn.onclick = () => {
                 elements.userOptionsModal.classList.add('active');
             };
+            if (elements.checkUpdatesBtn && window.electronAPI?.checkForUpdates) {
+                elements.checkUpdatesBtn.onclick = async () => {
+                    if (elements.updateStatusText) elements.updateStatusText.textContent = 'Estado: buscando…';
+                    showNotification('Buscando actualizaciones…', 'info');
+                    await window.electronAPI.checkForUpdates();
+                };
+            }
             if (elements.perfDebugToggle) {
                 elements.perfDebugToggle.checked = localStorage.getItem('perfDebugMode') === '1';
                 AppState.perfDebug = elements.perfDebugToggle.checked;
