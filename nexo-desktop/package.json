@@ -29,15 +29,14 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "REEMPLAZAR_OWNER",
+        "owner": "zhinouno-ui",
         "repo": "Nexo.exe",
         "releaseType": "release"
       }
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
