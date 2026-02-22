@@ -2,7 +2,6 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('fs/promises');
 const path = require('path');
-const { spawn } = require('child_process');
 
 const DEFAULT_DB = {
   contactsData: [],
@@ -18,35 +17,9 @@ let mainWindow = null;
 let currentZoomFactor = 1.0;
 let dbCache = null;
 let dbCacheLoadedAt = 0;
-let downloadedInstallerPath = null;
-let downloadedVersion = null;
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
-}
-
-function getUpdateStatusPath() {
-  return path.join(app.getPath('userData'), 'last-update-status.json');
-}
-
-async function writeUpdateStatus(status, details = {}) {
-  try {
-    const payload = { status, timestamp: new Date().toISOString(), ...details };
-    await fs.writeFile(getUpdateStatusPath(), JSON.stringify(payload, null, 2), 'utf8');
-  } catch (e) {
-    perfLog('updater', 'no se pudo escribir status', { message: e?.message || String(e) });
-  }
-}
-
-async function consumeLastUpdateStatus() {
-  try {
-    const p = getUpdateStatusPath();
-    const raw = await fs.readFile(p, 'utf8');
-    await fs.unlink(p).catch(() => {});
-    return JSON.parse(raw);
-  } catch (_e) {
-    return null;
-  }
 }
 
 async function readDb({ force = false } = {}) {
@@ -139,13 +112,9 @@ function setupAutoUpdater() {
     });
   });
   autoUpdater.on('update-downloaded', (info) => {
-    downloadedInstallerPath = info?.downloadedFile || downloadedInstallerPath || null;
-    downloadedVersion = info?.version || downloadedVersion || null;
-    perfLog('updater', 'downloaded', { downloadedInstallerPath, downloadedVersion });
     sendUpdaterStatus('downloaded', {
       version: info?.version || '',
-      downloadedFile: downloadedInstallerPath || '',
-      message: 'Actualización lista. Presioná Actualizar.'
+      message: 'Actualización lista. Reiniciar ahora'
     });
   });
   autoUpdater.on('error', (error) => {
@@ -317,55 +286,6 @@ ipcMain.handle('updater:check', async () => {
     return { ok: false, message };
   }
 });
-ipcMain.handle('updater:installAssisted', async () => {
-  if (!app.isPackaged) {
-    sendUpdaterStatus('error', { message: 'Instalación asistida disponible solo en app instalada.' });
-    return { ok: false, message: 'Not packaged' };
-  }
-
-  try {
-    if (!downloadedInstallerPath) {
-      await writeUpdateStatus('fallback', { reason: 'installer_path_missing' });
-      setImmediate(() => autoUpdater.quitAndInstall(true, true));
-      return { ok: true, mode: 'fallback-quitAndInstall' };
-    }
-
-    await fs.access(downloadedInstallerPath);
-    const updaterScript = path.join(__dirname, 'scripts', 'assisted-updater.ps1');
-    await fs.access(updaterScript);
-
-    await writeUpdateStatus('launching', {
-      installerPath: downloadedInstallerPath,
-      targetVersion: downloadedVersion || 'unknown'
-    });
-
-    const args = [
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', updaterScript,
-      '-ParentPid', String(process.pid),
-      '-InstallerPath', downloadedInstallerPath,
-      '-AppExecutable', process.execPath,
-      '-StatusFile', getUpdateStatusPath(),
-      '-TargetVersion', String(downloadedVersion || '')
-    ];
-
-    const child = spawn('powershell.exe', args, {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true
-    });
-    child.unref();
-    setTimeout(() => app.quit(), 120);
-    return { ok: true, mode: 'assisted-sidecar' };
-  } catch (error) {
-    const message = error?.message || String(error);
-    await writeUpdateStatus('error', { message });
-    sendUpdaterStatus('error', { message: `No se pudo iniciar updater asistido: ${message}` });
-    return { ok: false, message };
-  }
-});
-
 ipcMain.handle('updater:install', async () => {
   setImmediate(() => autoUpdater.quitAndInstall(true, true));
   return { ok: true };
@@ -373,12 +293,8 @@ ipcMain.handle('updater:install', async () => {
 
 app.whenReady().then(async () => {
   try { await readDb(); } catch (error) { console.warn('No se pudo precalentar cache local:', error?.message || error); }
-  const lastUpdateStatus = await consumeLastUpdateStatus();
   createWindow();
   setupAutoUpdater();
-  if (lastUpdateStatus) {
-    sendUpdaterStatus('assisted-status', lastUpdateStatus);
-  }
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
   } else try {

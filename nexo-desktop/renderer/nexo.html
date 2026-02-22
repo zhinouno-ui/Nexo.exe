@@ -1414,7 +1414,8 @@
                 <button id="importOpsBtn" class="btn" title="Importar agent_operations.csv"><i class="fas fa-chart-line"></i> Operaciones</button>
                 <button id="deleteAllBtn" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Borrar Todo</button>
                 <span id="saveStateBadge" class="save-state-badge pending">● Pendiente</span>
-                                <input type="file" id="opsFileInput" accept=".csv" style="display:none;">
+                <span id="storageMeter" class="storage-meter" title="Diagnóstico de almacenamiento">Storage --</span>
+                <input type="file" id="opsFileInput" accept=".csv" style="display:none;">
             </div>
         </div>
 
@@ -1535,7 +1536,7 @@
                 <div class="export-option selected" data-format="excel">
                     <i class="fas fa-file-excel"></i>
                     <div class="export-option-text">
-                        <div class="export-option-title">Excel con formato</div>
+                        <div class="export-option-title">Excel (CSV)</div>
                         <div class="export-option-desc">Compatible con Excel y Google Sheets</div>
                     </div>
                 </div>
@@ -1640,20 +1641,6 @@
                     <div class="export-option-text">
                         <div class="export-option-title">Cambiar mensaje WhatsApp</div>
                         <div class="export-option-desc">Editar plantilla con token {usuario}</div>
-                    </div>
-                </div>
-                <div class="export-option" id="openGithubReleasesOption">
-                    <i class="fab fa-github"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Descarga manual (seguro)</div>
-                        <div class="export-option-desc">Abrir Releases oficiales en GitHub</div>
-                    </div>
-                </div>
-                <div class="export-option" id="showQuickMetricsOption">
-                    <i class="fas fa-chart-bar"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Métricas rápidas</div>
-                        <div class="export-option-desc">Resumen de progreso y actividad</div>
                     </div>
                 </div>
                 <div class="export-option" id="checkUpdatesOption">
@@ -5225,20 +5212,11 @@
                     await window.electronAPI.checkForUpdates();
                 };
             }
-            if (elements.restartUpdateOption && window.electronAPI?.installUpdateAssisted) {
+            if (elements.restartUpdateOption && window.electronAPI?.installUpdate) {
                 elements.restartUpdateOption.onclick = async () => {
-                    showNotification('Cerrando para instalar actualización asistida…', 'info');
-                    try {
-                        const result = await window.electronAPI.installUpdateAssisted();
-                        if (!result?.ok) {
-                            throw new Error(result?.message || 'No se pudo iniciar la instalación asistida');
-                        }
-                        if (result.mode === 'fallback-quitAndInstall') {
-                            showNotification('Sin sidecar disponible: usando instalador estándar…', 'warning');
-                        }
-                    } catch (error) {
-                        showNotification(`No se pudo iniciar la actualización: ${error?.message || error}`, 'error');
-                    }
+                    showNotification('Cerrando para instalar actualización…', 'info');
+                    await window.electronAPI.installUpdate();
+                    setTimeout(() => window.close(), 120);
                 };
             }
             if (window.electronAPI?.onUpdaterStatus) {
@@ -5273,19 +5251,6 @@
                         if (descEl) descEl.textContent = 'Cerrar e instalar actualización';
                         showNotification(payload.message || 'Actualización lista. Presioná Actualizar.', 'success');
                     }
-                    if (status === 'assisted-status') {
-                        const assistedMessage = payload.message || `Estado updater asistido: ${payload.status || 'desconocido'}`;
-                        elements.updateStatusText.textContent = `Estado: ${assistedMessage}`;
-                        if (payload.status === 'success') {
-                            if (elements.updateProgressFill) elements.updateProgressFill.style.width = '100%';
-                            showNotification('✅ Actualización aplicada correctamente.', 'success');
-                        } else if (payload.status === 'error') {
-                            if (elements.updateProgressFill) elements.updateProgressFill.style.width = '0%';
-                            showNotification(`Error en actualización asistida: ${assistedMessage}`, 'error');
-                        } else {
-                            showNotification(assistedMessage, 'info');
-                        }
-                    }
                     if (status === 'error') {
                         elements.updateStatusText.textContent = payload.message || 'Error de actualización';
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '0%';
@@ -5318,26 +5283,6 @@
                 elements.whatsappMessageModal.classList.add('active');
                 elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
             };
-            if (elements.openGithubReleasesOption) {
-                elements.openGithubReleasesOption.onclick = async () => {
-                    const url = 'https://github.com/zhinouno-ui/Nexo.exe/releases/latest';
-                    try {
-                        if (window.electronAPI?.openExternal) await window.electronAPI.openExternal(url);
-                        else window.open(url, '_blank');
-                    } catch (e) {
-                        showNotification('No se pudo abrir GitHub Releases', 'error');
-                    }
-                };
-            }
-            if (elements.showQuickMetricsOption) {
-                elements.showQuickMetricsOption.onclick = () => {
-                    const total = AppState.contacts.length;
-                    const revisados = AppState.contacts.filter(c => c.status && c.status !== 'sin revisar').length;
-                    const conTel = AppState.contacts.filter(c => (c.phone || '').trim()).length;
-                    const pct = total ? Math.round((revisados / total) * 100) : 0;
-                    showNotification(`Métrica rápida: ${revisados}/${total} revisados (${pct}%), con teléfono ${conTel}.`, 'info');
-                };
-            }
             $('#closeUserOptionsModal').onclick = () => elements.userOptionsModal.classList.remove('active');
 
             elements.searchInput.oninput = (e) => {
@@ -5866,23 +5811,6 @@
             elements.startBtn.disabled = false;
         }
 
-        function csvField(value) {
-            if (value === null || value === undefined) return '';
-            return String(value).replace(/
-?
-/g, ' ').trim();
-        }
-
-        function vcfEscape(value) {
-            return String(value || '')
-                .replace(/\/g, '\\')
-                .replace(/;/g, '\;')
-                .replace(/,/g, '\,')
-                .replace(/
-?
-/g, '\n');
-        }
-
         function formatCsvField(value) {
             if (value === null || value === undefined) return '""';
             const stringValue = String(value);
@@ -5893,71 +5821,42 @@
         }
         
         function exportToExcel(contacts) {
-            const statusColor = {
-                'sin revisar': '#3b82f6',
-                'contactado': '#10b981',
-                'revisado': '#eab308',
-                'jugando': '#8b5cf6',
-                'sin wsp': '#ef4444',
-                'no interesado': '#6b7280'
-            };
-            const rows = contacts.map(c => {
-                const st = String(c.status || 'sin revisar').toLowerCase();
-                const bg = statusColor[st] || '#334155';
-                return `<tr>
-                    <td>${csvField(c.name)}</td>
-                    <td>${csvField(c.phone)}</td>
-                    <td>${csvField(c.origin)}</td>
-                    <td style="background:${bg};color:#fff;font-weight:700;">${csvField(c.status)}</td>
-                    <td>${csvField(c.cargas ?? '')}</td>
-                    <td>${csvField(c.descargas ?? '')}</td>
-                    <td>${csvField(c.neto ?? '')}</td>
-                    <td>${csvField(c.score ?? '')}</td>
-                    <td>${csvField(c.lealtad ?? '')}</td>
-                    <td>${csvField(new Date(c.lastUpdated || Date.now()).toLocaleString('es-ES'))}</td>
-                </tr>`;
-            }).join('');
-
-            const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-                body{font-family:Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0}
-                table{border-collapse:collapse;width:100%}
-                th,td{border:1px solid #94a3b8;padding:6px 8px;font-size:12px}
-                th{background:#1e293b;color:#f8fafc;position:sticky;top:0}
-                tr:nth-child(even) td{background:#0b1220;color:#e2e8f0}
-                tr:nth-child(odd) td{background:#111827;color:#e2e8f0}
-                .meta{margin:8px 0 12px;color:#94a3b8}
-            </style></head><body>
-                <h2>Nexo Export (${contacts.length} contactos)</h2>
-                <div class="meta">Generado: ${new Date().toLocaleString('es-ES')}</div>
-                <table><thead><tr>
-                    <th>Nombre</th><th>Teléfono</th><th>Origen</th><th>Estado</th><th>Cargas</th><th>Descargas</th><th>Neto</th><th>Score</th><th>Lealtad</th><th>Última actualización</th>
-                </tr></thead><tbody>${rows}</tbody></table>
-            </body></html>`;
-
-            downloadFile(html, `contactos_${new Date().toISOString().split('T')[0]}.xls`, 'application/vnd.ms-excel;charset=utf-8;');
-            showNotification('Exportación Excel con formato completada', 'success');
+            let csvContent = "Nombre,Alias,Teléfono,Origen,Estado,Cargas,Descargas,Neto,Score,Fecha Actualización\n";
+            contacts.forEach(c => {
+                const row = [
+                    formatCsvField(c.name),
+                    formatCsvField(c.alias || extractPrimaryAlias(c.name || '')),
+                    formatCsvField(c.phone),
+                    formatCsvField(c.origin),
+                    formatCsvField(c.status),
+                    formatCsvField(c.ops?.cargasCount || 0),
+                    formatCsvField(c.ops?.descargasCount || 0),
+                    formatCsvField(Math.round(c.ops?.netoTotal || 0)),
+                    formatCsvField(c.ops?.score || 0),
+                    formatCsvField(new Date(c.lastUpdated).toLocaleDateString('es-ES'))
+                ];
+                csvContent += row.join(',') + '\n';
+            });
+            downloadFile(csvContent, `contactos_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv;charset=utf-8;');
+            showNotification('Exportación a Excel completada', 'success');
         }
 
         function exportToVCF(contacts) {
-            const lines = [];
+            let vcfContent = '';
             contacts.forEach(c => {
-                const name = csvField(c.name) || 'Sin nombre';
-                const phone = normalizePhoneNumber(c.phone || '');
-                lines.push('BEGIN:VCARD');
-                lines.push('VERSION:3.0');
-                lines.push(`N:${vcfEscape(name)};;;;`);
-                lines.push(`FN:${vcfEscape(name)}`);
-                if (phone) lines.push(`TEL;TYPE=CELL:${phone}`);
-                lines.push(`NOTE:${vcfEscape(`Origen: ${c.origin || '-'} | Estado: ${c.status || '-'}`)}`);
-                lines.push('END:VCARD');
+                vcfContent += `BEGIN:VCARD\n`;
+                vcfContent += `VERSION:3.0\n`;
+                vcfContent += `FN:${c.name}\n`;
+                if (c.phone) {
+                    vcfContent += `TEL;TYPE=CELL:${c.phone}\n`;
+                }
+                vcfContent += `NOTE:Origen: ${c.origin}, Estado: ${c.status}\n`;
+                vcfContent += `END:VCARD\n\n`;
             });
-            const vcfContent = lines.join('
-') + '
-';
             downloadFile(vcfContent, `contactos_${new Date().toISOString().split('T')[0]}.vcf`, 'text/vcard;charset=utf-8');
-            showNotification('✅ VCF real exportado (compatible con celulares)', 'success');
+            showNotification('✅ Exportación a VCF completada', 'success');
         }
-
+        
         function parseVCF(text) {
             const contacts = [];
             const vcards = text.split('BEGIN:VCARD').filter(v => v.trim());
