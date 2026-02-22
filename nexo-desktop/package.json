@@ -1,6 +1,6 @@
 {
   "name": "nexo-desktop",
-  "version": "1.1.2",
+  "version": "1.1.5",
   "description": "Nexo desktop app built with Electron",
   "main": "main.js",
   "author": "",
@@ -29,7 +29,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "REEMPLAZAR_OWNER",
+        "owner": "zhinouno-ui",
         "repo": "Nexo.exe",
         "releaseType": "release"
       }

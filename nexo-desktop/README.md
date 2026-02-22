@@ -46,14 +46,14 @@ Muestra estados:
 
 `package.json` usa `build.publish` con GitHub:
 
-- `owner: REEMPLAZAR_OWNER`
+- `owner: zhinouno-ui`
 - `repo: Nexo.exe`
 
 Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHub en `package.json`.
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.2`).
+1. Subir versión en `package.json` (ej. `1.1.5`).
 2. Ejecutar `npm run dist`.
 3. Crear GitHub Release con tag `vX.Y.Z`.
 4. Adjuntar assets de `dist/`:
