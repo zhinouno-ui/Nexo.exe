@@ -14,6 +14,7 @@ const DEFAULT_DB = {
 };
 
 let mainWindow = null;
+let currentZoomFactor = 1.0;
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
@@ -90,6 +91,25 @@ function setupAutoUpdater() {
   });
 }
 
+
+function clampZoom(value) {
+  return Math.min(3, Math.max(0.5, value));
+}
+
+function applyZoomDelta(delta) {
+  if (!mainWindow || mainWindow.isDestroyed()) return currentZoomFactor;
+  currentZoomFactor = clampZoom((mainWindow.webContents.getZoomFactor?.() || currentZoomFactor) + delta);
+  mainWindow.webContents.setZoomFactor(currentZoomFactor);
+  return currentZoomFactor;
+}
+
+function applyZoomReset() {
+  if (!mainWindow || mainWindow.isDestroyed()) return 1;
+  currentZoomFactor = 1;
+  mainWindow.webContents.setZoomFactor(1);
+  return currentZoomFactor;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -115,6 +135,31 @@ function createWindow() {
       event.preventDefault();
       shell.openExternal(url);
     }
+  });
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (!input.control) return;
+    if (input.type !== 'keyDown') return;
+    const key = String(input.key || '').toLowerCase();
+    if (['+', '=', 'plus', 'numadd'].includes(key)) {
+      event.preventDefault();
+      applyZoomDelta(0.1);
+      return;
+    }
+    if (['-', '_', 'minus', 'numsub'].includes(key)) {
+      event.preventDefault();
+      applyZoomDelta(-0.1);
+      return;
+    }
+    if (key === '0' || key === 'num0') {
+      event.preventDefault();
+      applyZoomReset();
+    }
+  });
+
+  mainWindow.webContents.on('zoom-changed', (_event, zoomDirection) => {
+    if (zoomDirection === 'in') applyZoomDelta(0.1);
+    else if (zoomDirection === 'out') applyZoomDelta(-0.1);
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'nexo.html'));
@@ -155,6 +200,9 @@ ipcMain.handle('external:open', async (_event, url) => {
   await shell.openExternal(url);
   return true;
 });
+ipcMain.handle('zoom:in', async () => ({ zoomFactor: applyZoomDelta(0.1) }));
+ipcMain.handle('zoom:out', async () => ({ zoomFactor: applyZoomDelta(-0.1) }));
+ipcMain.handle('zoom:reset', async () => ({ zoomFactor: applyZoomReset() }));
 ipcMain.handle('updater:check', async () => {
   if (!app.isPackaged) {
     sendUpdaterStatus('error', { message: 'Auto-update solo funciona en app instalada (NSIS), no en modo desarrollo.' });

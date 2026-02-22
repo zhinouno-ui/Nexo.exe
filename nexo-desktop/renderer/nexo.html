@@ -197,6 +197,31 @@
             flex-wrap: wrap;
         }
         .view-actions .btn { padding: 8px 12px; font-size: 0.84rem; border-radius: 10px; }
+
+        .nexo-brand {
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-right:12px;
+            padding:8px 12px;
+            border:1px solid rgba(59,130,246,.35);
+            border-radius:12px;
+            background:linear-gradient(90deg, rgba(30,64,175,.24), rgba(15,23,42,.3));
+            box-shadow: inset 0 0 0 1px rgba(125,211,252,.08);
+        }
+        .nexo-brand-logo {
+            width:28px;
+            height:28px;
+            border-radius:8px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-weight:900;
+            color:#0b1220;
+            background:linear-gradient(135deg,#60a5fa,#34d399);
+        }
+        .nexo-brand-text { font-weight:800; letter-spacing:.4px; }
+        .nexo-brand-sub { font-size:.72rem; color:var(--text-secondary); }
         .view-actions .btn i { font-size: 0.9rem; }
 
         .btn {
@@ -1335,6 +1360,13 @@
         </div>
         <!-- Barra de navegación -->
         <div class="navbar">
+            <div class="nexo-brand" title="Nexo Desktop">
+                <div class="nexo-brand-logo">N</div>
+                <div>
+                    <div class="nexo-brand-text">Nexo</div>
+                    <div class="nexo-brand-sub">Desktop</div>
+                </div>
+            </div>
             <div class="stats">
                 <div class="stat-box stat-total" data-filter="">
                     <div class="stat-value" id="totalCount">0</div>
@@ -1559,6 +1591,17 @@
         </div>
     </div>
 
+
+    <div class="modal" id="contactHistoryModal">
+        <div class="modal-content history-modal-content" style="max-width: 860px;">
+            <div class="modal-header"><i class="fas fa-id-card"></i> Historial por usuario</div>
+            <div id="contactHistoryMeta" class="contact-history-meta"></div>
+            <div class="history-list" id="contactHistoryList"></div>
+            <div class="modal-actions">
+                <button id="closeContactHistoryModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
+        </div>
+    </div>
 
     <div class="modal" id="shortcutsModal">
         <div class="modal-content" style="max-width:700px;">
@@ -1845,7 +1888,6 @@
                 tt: { name: 'TT', queue: [], cursor: 0, stack: [] },
                 tn: { name: 'TN', queue: [], cursor: 0, stack: [] }
             },
-            turnosStrictProgress: false,
             activeShift: null,
             editingContactId: null,
             lastSelectedContactId: null,
@@ -1900,6 +1942,9 @@
             settingsBtn: $('#settingsBtn'),
             historyBtn: $('#historyBtn'),
             historyModal: $('#historyModal'),
+            contactHistoryModal: $('#contactHistoryModal'),
+            contactHistoryList: $('#contactHistoryList'),
+            contactHistoryMeta: $('#contactHistoryMeta'),
             deleteAllBtn: $('#deleteAllBtn'),
             importOpsBtn: $('#importOpsBtn'),
             undoBtn: $('#undoBtn'),
@@ -2481,16 +2526,30 @@
                 </div>`;
         }
 
-        function addToHistory(action, details) {
+        function addContactTimeline(contactId, action, details) {
+            const contact = AppState.contacts.find(c => c.id === contactId);
+            if (!contact) return;
+            if (!Array.isArray(contact.timeline)) contact.timeline = [];
+            contact.timeline.unshift({
+                timestamp: new Date().toISOString(),
+                action,
+                details
+            });
+            if (contact.timeline.length > 500) contact.timeline = contact.timeline.slice(0, 500);
+        }
+
+        function addToHistory(action, details, contactId = null) {
             const historyEntry = {
                 timestamp: new Date().toISOString(),
                 action: action,
-                details: details
+                details: details,
+                contactId: contactId || null
             };
             AppState.history.unshift(historyEntry);
-            if (AppState.history.length > 50) {
-                AppState.history = AppState.history.slice(0, 50);
+            if (AppState.history.length > 500) {
+                AppState.history = AppState.history.slice(0, 500);
             }
+            if (contactId) addContactTimeline(contactId, action, details);
             saveHistory();
         }
 
@@ -3794,18 +3853,7 @@
                 </div>`;
             }).join('');
 
-            const strictCard = `
-                <div class="shift-card strict-mode-card">
-                    <div class="strict-mode-title">Progreso por cola sin revisar</div>
-                    <div class="strict-mode-desc">El conteo competitivo ahora siempre respeta el <strong>horario local</strong> (TM/TT/TN):
-                    si trabajás usuarios de otro turno, el crédito pasa automáticamente a tu franja actual.</div>
-                    <label class="strict-toggle">
-                        <input type="checkbox" ${AppState.turnosStrictProgress ? 'checked' : ''} onchange="toggleStrictShiftProgress(this.checked)">
-                        <span>${AppState.turnosStrictProgress ? 'Activo: protegido contra cruces de turnos' : 'Desactivado: cualquier cambio de estado suma al turno asignado'}</span>
-                    </label>
-                </div>`;
-
-            elements.shiftsView.innerHTML = overviewCard + cards + strictCard;
+            elements.shiftsView.innerHTML = overviewCard + cards;
             elements.shiftsView.style.display = 'grid';
         }
 
@@ -3814,11 +3862,6 @@
             saveData();
         };
 
-        window.toggleStrictShiftProgress = (checked) => {
-            AppState.turnosStrictProgress = !!checked;
-            renderShiftsView();
-            saveData();
-        };
 
         window.rebalanceShift = (shift) => {
             const seq = ['tm', 'tt', 'tn'];
@@ -4155,6 +4198,9 @@
                             <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar nombre">
                                 <i class="fas fa-pencil-alt"></i>
                             </button>
+                            <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="openContactHistory(${contact.id}, event)" title="Historial del usuario">
+                                <i class="fas fa-id-card"></i>
+                            </button>
                         </div>
                     </div>
                     <div class="card-details">
@@ -4258,6 +4304,7 @@
                                 title="No Interesado">
                             <i class="fas fa-times"></i>
                         </button>
+                        <button class="btn" style="padding: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;" onclick="openContactHistory(${contact.id}, event)" title="Historial por usuario"><i class="fas fa-id-card"></i></button>
                         <button class="btn btn-danger" style="padding: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;" onclick="deleteContact(${contact.id}, event)" title="Eliminar">
                             <i class="fas fa-trash"></i>
                         </button>
@@ -4400,7 +4447,7 @@
                 const moved = updateCompetitionCredit(contact, requestedStatus, source, { forceTransfer: true });
                 if (!moved) return;
                 touchContactEdit(contact, source === 'shift' ? 'turno_transfer' : 'status_transfer');
-                addToHistory('Crédito de competencia transferido', `${contact.name}: ahora cuenta para ${String(contact.shiftReviewedByShift || '-').toUpperCase()}`);
+                addToHistory('Crédito de competencia transferido', `${contact.name}: ahora cuenta para ${String(contact.shiftReviewedByShift || '-').toUpperCase()}`, contact.id);
                 setSaveState('pending', 'Guardando cambios...');
                 saveData();
                 render();
@@ -4413,7 +4460,7 @@
             touchContactEdit(contact, source === 'shift' ? 'turno_status' : 'status_change');
             AppState.lastEditedContact = id;
             const policyNote = (requestedStatus !== newStatus && requestedStatus === 'sin wsp') ? ' (autopolítica 3 recontactos)' : '';
-            addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`);
+            addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`, contact.id);
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
             setSaveState('pending', 'Guardando cambios...');
             saveData();
@@ -4807,6 +4854,37 @@
             editContactField(contact.id, 'name');
         };
 
+        window.openContactHistoryByName = (name, event) => {
+            if (event) event.stopPropagation();
+            const contact = getHistoryContact(name);
+            if (!contact) {
+                showNotification('No se encontró historial del usuario', 'warning');
+                return;
+            }
+            openContactHistory(contact.id);
+        };
+
+        window.openContactHistory = (contactId, event) => {
+            if (event) event.stopPropagation();
+            const contact = AppState.contacts.find(c => c.id === contactId);
+            if (!contact) {
+                showNotification('Contacto no encontrado', 'warning');
+                return;
+            }
+            const timeline = Array.isArray(contact.timeline) ? contact.timeline : [];
+            const html = timeline.length ? timeline.map(item => `
+                <div class="history-item">
+                    <div class="history-time">${new Date(item.timestamp).toLocaleString('es-ES')}</div>
+                    <div class="history-action"><strong>${item.action}:</strong> ${item.details}</div>
+                </div>
+            `).join('') : '<p style="text-align:center;color:var(--text-secondary);padding:24px;">Sin historial específico para este usuario.</p>';
+            if (elements.contactHistoryMeta) {
+                elements.contactHistoryMeta.textContent = `${contact.name} · ${timeline.length} evento(s)`;
+            }
+            if (elements.contactHistoryList) elements.contactHistoryList.innerHTML = html;
+            if (elements.contactHistoryModal) elements.contactHistoryModal.classList.add('active');
+        };
+
         function renderHistoryList(filterTerm = '') {
             const term = normalizeUsername(filterTerm);
             const filtered = AppState.history.filter(entry => {
@@ -4826,6 +4904,7 @@
                         <div class="history-item-actions">
                             <button class="btn" onclick="searchFromHistory('${userName.replace(/'/g, "\\'")}', event)"><i class="fas fa-search"></i> Ver</button>
                             <button class="btn" onclick="editFromHistory('${userName.replace(/'/g, "\\'")}', event)" ${contact ? '' : 'disabled'}><i class="fas fa-pen"></i> Editar</button>
+                            <button class="btn" onclick="openContactHistoryByName('${userName.replace(/'/g, "\\'")}', event)" ${contact ? '' : 'disabled'}><i class="fas fa-id-card"></i> Historial</button>
                         </div>
                     </div>
                 `;
@@ -5145,6 +5224,13 @@
                     undoToLastContact();
                     return;
                 }
+                if ((e.ctrlKey || e.metaKey) && ['+', '=', '-','0'].includes(e.key) && !e.target.matches('input, textarea')) {
+                    e.preventDefault();
+                    if (e.key === '+' || e.key === '=') window.electronAPI?.zoomIn?.();
+                    else if (e.key === '-') window.electronAPI?.zoomOut?.();
+                    else if (e.key === '0') window.electronAPI?.zoomReset?.();
+                    return;
+                }
                 if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !e.target.matches('input, textarea, select')) {
                     e.preventDefault();
                     applyFilters();
@@ -5164,6 +5250,13 @@
                 else if (code === 'Numpad0') undoToLastContact();
                 else if (code === 'NumpadAdd') elements.viewListBtn.click();
             });
+
+            document.addEventListener('wheel', (e) => {
+                if (!(e.ctrlKey || e.metaKey)) return;
+                e.preventDefault();
+                if (e.deltaY < 0) window.electronAPI?.zoomIn?.();
+                else window.electronAPI?.zoomOut?.();
+            }, { passive: false });
 
             elements.statusFilter.onchange = (e) => {
                 AppState.statusFilter = e.target.value;
@@ -5487,6 +5580,7 @@
 
             elements.historyBtn.onclick = showHistoryModal;
             $('#closeHistoryModal').onclick = () => $('#historyModal').classList.remove('active');
+            if ($('#closeContactHistoryModal')) $('#closeContactHistoryModal').onclick = () => $('#contactHistoryModal').classList.remove('active');
             $('#clearHistoryBtn').onclick = () => {
                 if (confirm('¿Borrar todo el historial?')) {
                     AppState.history = [];
@@ -5532,7 +5626,7 @@
                     touchContactEdit(contact, 'modal_edit');
                     AppState.lastEditedContact = contact.id;
                     const newSnapshot = `${contact.name} | ${contact.phone || 'sin teléfono'} | ${contact.origin || 'Manual'} | ${contact.status || 'sin revisar'}`;
-                    addToHistory('Contacto editado', `${oldSnapshot} → ${newSnapshot}`);
+                    addToHistory('Contacto editado', `${oldSnapshot} → ${newSnapshot}`, editing.id);
                     detectDuplicates();
                     saveData();
                     render();

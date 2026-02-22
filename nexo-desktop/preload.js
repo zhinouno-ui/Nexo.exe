@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   installUpdate: () => ipcRenderer.invoke('updater:install'),
+  zoomIn: () => ipcRenderer.invoke('zoom:in'),
+  zoomOut: () => ipcRenderer.invoke('zoom:out'),
+  zoomReset: () => ipcRenderer.invoke('zoom:reset'),
   onUpdaterStatus: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('updater:status', listener);
