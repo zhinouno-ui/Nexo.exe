@@ -53,12 +53,12 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.10`).
+1. Subir versión en `package.json` (ej. `1.1.11`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.10
-   git push origin v1.1.10
+   git tag v1.1.11
+   git push origin v1.1.11
    ```
 4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest` y genera el Release automáticamente.
 5. Verificar que el Release tenga assets:
@@ -80,7 +80,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.10`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.11`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
@@ -97,3 +97,21 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 - El proceso de importación ahora indexa por teléfono/nombre en memoria (Map) para evitar búsquedas O(n²).
 - La etapa "Integrando…" usa chunks adaptativos y cede el hilo periódicamente para que la UI no quede congelada.
+
+
+## Descarga manual (seguro)
+
+- En **Ajustes** existe la opción para abrir `https://github.com/zhinouno-ui/Nexo.exe/releases/latest` como fallback manual.
+
+## Exportación mejorada
+
+- "Excel con formato" exporta `.xls` con estilos/colores y separaciones para abrir directo en Excel.
+- VCF exporta en formato vCard 3.0 real con `CRLF`, compatible para importar en celulares.
+
+## Updater asistido (sidecar)
+
+- Cuando la actualización ya está descargada, el botón **Actualizar.** intenta iniciar un sidecar de PowerShell (`scripts/assisted-updater.ps1`).
+- El sidecar espera que Nexo cierre, valida el instalador (existe y tamaño > 0), ejecuta el NSIS y vuelve a abrir la app.
+- Si el sidecar no puede iniciarse, se usa fallback a `quitAndInstall` estándar de `electron-updater`.
+- El resultado de la ejecución se guarda en `AppData\Roaming\Nexo\last-update-status.json` y se muestra al próximo arranque.
+
