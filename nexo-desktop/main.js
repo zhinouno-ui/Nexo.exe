@@ -69,7 +69,14 @@ async function writeDb(data) {
 
 let writeQueue = Promise.resolve();
 function queueWrite(data) {
-  writeQueue = writeQueue.then(() => writeDb(data));
+  const started = Date.now();
+  writeQueue = writeQueue.then(async () => {
+    await writeDb(data);
+    perfLog('store', 'write ok', { ms: Date.now() - started });
+  }).catch((error) => {
+    perfLog('store', 'write error', { ms: Date.now() - started, message: error?.message || String(error) });
+    throw error;
+  });
   return writeQueue;
 }
 
@@ -78,9 +85,13 @@ function sendUpdaterStatus(status, payload = {}) {
   mainWindow.webContents.send('updater:status', { status, ...payload });
 }
 
+function perfLog(scope, message, extra = {}) {
+  try { console.log(`[nexo:${scope}] ${message}`, extra); } catch (_) {}
+}
+
 function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on('checking-for-update', () => sendUpdaterStatus('checking'));
   autoUpdater.on('update-available', (info) => {
@@ -189,14 +200,49 @@ function createWindow() {
 ipcMain.handle('store:getAll', async () => readDb());
 ipcMain.handle('store:getCacheMeta', async () => ({ cached: !!dbCache, loadedAt: dbCacheLoadedAt || null }));
 ipcMain.handle('store:setAll', async (_event, data) => {
-  await queueWrite(data && typeof data === 'object' ? data : {});
-  return readDb();
+  const started = Date.now();
+  try {
+    perfLog('store:setAll', 'start');
+    await queueWrite(data && typeof data === 'object' ? data : {});
+    const db = await readDb();
+    perfLog('store:setAll', 'done', { ms: Date.now() - started });
+    return db;
+  } catch (error) {
+    perfLog('store:setAll', 'error', { ms: Date.now() - started, message: error?.message || String(error) });
+    throw new Error(`store:setAll failed: ${error?.message || String(error)}`);
+  }
 });
 ipcMain.handle('store:patch', async (_event, partial) => {
-  const current = await readDb();
-  const next = { ...current, ...(partial && typeof partial === 'object' ? partial : {}) };
-  await queueWrite(next);
-  return readDb();
+  const started = Date.now();
+  try {
+    perfLog('store:patch', 'start');
+    const current = await readDb();
+    const next = { ...current, ...(partial && typeof partial === 'object' ? partial : {}) };
+    await queueWrite(next);
+    const db = await readDb();
+    perfLog('store:patch', 'done', { ms: Date.now() - started });
+    return db;
+  } catch (error) {
+    perfLog('store:patch', 'error', { ms: Date.now() - started, message: error?.message || String(error) });
+    throw new Error(`store:patch failed: ${error?.message || String(error)}`);
+  }
+});
+ipcMain.handle('store:importContactsChunk', async (_event, payload) => {
+  const started = Date.now();
+  try {
+    const chunk = Array.isArray(payload?.chunk) ? payload.chunk : [];
+    const reset = !!payload?.reset;
+    perfLog('store:importChunk', 'start', { reset, size: chunk.length });
+    const current = await readDb();
+    const prev = Array.isArray(current.contactsData) ? current.contactsData : [];
+    current.contactsData = reset ? chunk : prev.concat(chunk);
+    await queueWrite(current);
+    perfLog('store:importChunk', 'done', { ms: Date.now() - started, total: current.contactsData.length });
+    return { ok: true, total: current.contactsData.length };
+  } catch (error) {
+    perfLog('store:importChunk', 'error', { ms: Date.now() - started, message: error?.message || String(error) });
+    throw new Error(`store:importContactsChunk failed: ${error?.message || String(error)}`);
+  }
 });
 ipcMain.handle('store:backupNow', async () => {
   const current = await readDb();

@@ -1900,7 +1900,8 @@
             storageEstimate: null,
             lastStorageWarnAt: 0,
             perfDebug: false,
-            importCancelRequested: false
+            importCancelRequested: false,
+            reviewPositiveCounter: 0
         };
 
         const elements = {
@@ -1989,6 +1990,10 @@
         function normalizeUsername(name) {
             if (!name) return '';
             return name.toString().toLowerCase().trim();
+        }
+
+        function normalizeName(name) {
+            return normalizeUsername(name).replace(/\s+/g, ' ').trim();
         }
 
         function normalizeAlias(alias) {
@@ -2828,6 +2833,24 @@
             return parseCSV(text);
         }
 
+        async function persistContactsChunkedForImport(contacts) {
+            if (!(window.nexoStore && typeof window.nexoStore.importContactsChunk === 'function')) return false;
+            const chunkSize = 400;
+            const total = contacts.length;
+            const started = Date.now();
+            console.info('[import] store chunked start', { total, chunkSize });
+            for (let i = 0; i < total; i += chunkSize) {
+                const chunk = contacts.slice(i, i + chunkSize);
+                await window.nexoStore.importContactsChunk({ chunk, reset: i === 0 });
+                const done = Math.min(total, i + chunk.length);
+                const pct = total ? Math.min(99, 60 + Math.round((done / total) * 39)) : 99;
+                setLoadingState(true, `Guardando… ${done}/${total}`, pct, true);
+                await new Promise((r) => setTimeout(r, 0));
+            }
+            console.info('[import] store chunked done', { ms: Date.now() - started, total });
+            return true;
+        }
+
         async function loadFiles() {
             const origin = elements.originInput.value.trim() || 'Sin especificar';
             let totalNewContacts = 0;
@@ -2835,8 +2858,10 @@
 
             if (selectedFiles.length === 0) return;
             AppState.importCancelRequested = false;
+            const importStarted = Date.now();
             setLoadingState(true, 'Leyendo archivo…', 2, true);
 
+            try {
             for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex++) {
                 const file = selectedFiles[fileIndex];
                 const text = await file.text();
@@ -2849,6 +2874,7 @@
                 }));
 
                 setLoadingState(true, `Integrando… ${file.name}`, 60, true);
+                console.info('[import] merge start', { file: file.name, rows: parsedContacts.length });
                 const nowIso = new Date().toISOString();
                 let fileNewContacts = 0;
                 let fileMerged = 0;
@@ -2907,10 +2933,12 @@
                 }
 
                 addToHistory('Importación de archivo', `${file.name}: +${fileNewContacts} nuevos / ${fileMerged} actualizados`);
+                console.info('[import] merge done', { file: file.name, nuevos: fileNewContacts, actualizados: fileMerged });
             }
 
             detectDuplicates();
-            saveData();
+            const chunkedSaved = await persistContactsChunkedForImport(sanitizeContactsForStorage(AppState.contacts));
+            if (!chunkedSaved) saveData();
             elements.uploadScreen.classList.add('hidden');
             elements.mainApp.style.display = 'block';
             await perfMark('render inicial', async () => { render(); });
@@ -2921,9 +2949,16 @@
                     : `✅ ${totalNewContacts} contactos nuevos, ${totalMerged} actualizados`,
                 AppState.importCancelRequested ? 'warning' : 'success'
             );
-            selectedFiles = [];
-            elements.fileInput.value = '';
-            elements.fileList.innerHTML = '';
+            console.info('[import] complete', { ms: Date.now() - importStarted, newContacts: totalNewContacts, merged: totalMerged });
+            } catch (error) {
+                console.error('[import] failed', error);
+                setLoadingState(false, 'Error de importación', null, false);
+                showNotification(`Error al importar: ${error?.message || error}`, 'error');
+            } finally {
+                selectedFiles = [];
+                elements.fileInput.value = '';
+                elements.fileList.innerHTML = '';
+            }
         }
 
 
@@ -4470,6 +4505,12 @@
             AppState.lastEditedContact = id;
             const policyNote = (requestedStatus !== newStatus && requestedStatus === 'sin wsp') ? ' (autopolítica 3 recontactos)' : '';
             addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`, contact.id);
+            if (oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
+                AppState.reviewPositiveCounter = (AppState.reviewPositiveCounter || 0) + 1;
+                const cheers = { 25: '🔥 ¡Gran ritmo! 25 revisiones completas.', 50: '💪 ¡Excelente! Llegaste a 50 revisiones.', 100: '🚀 ¡Modo pro activado! 100 revisiones.' };
+                const msg = cheers[AppState.reviewPositiveCounter];
+                if (msg) showNotification(msg, 'success');
+            }
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
             setSaveState('pending', 'Guardando cambios...');
             saveData();
@@ -5018,12 +5059,26 @@
 
         function parseContactsInWorker(fileName, text, onProgress) {
             return new Promise((resolve, reject) => {
-                const worker = new Worker('csv-worker.js');
+                const started = Date.now();
+                let worker;
+                try {
+                    const workerUrl = new URL('./csv-worker.js', window.location.href);
+                    worker = new Worker(workerUrl, { type: 'classic' });
+                } catch (createErr) {
+                    console.warn('[import] Worker URL fallback:', createErr);
+                    try {
+                        worker = new Worker('csv-worker.js');
+                    } catch (fallbackErr) {
+                        return reject(new Error(`No se pudo crear el worker de importación: ${fallbackErr?.message || fallbackErr}`));
+                    }
+                }
+
                 worker.onmessage = (event) => {
                     const msg = event.data || {};
-                    if (msg.type === 'progress') onProgress && onProgress(msg);
+                    if (msg.type === 'progress') onProgress && onProgress(msg.payload || msg);
                     if (msg.type === 'done') {
                         worker.terminate();
+                        console.info('[import] parse done', { ms: Date.now() - started, rows: (msg.contacts || []).length });
                         resolve(msg.contacts || []);
                     }
                     if (msg.type === 'error') {
@@ -5033,8 +5088,9 @@
                 };
                 worker.onerror = (error) => {
                     worker.terminate();
-                    reject(error);
+                    reject(new Error(`Worker error: ${error?.message || error}`));
                 };
+                console.info('[import] parse start', { fileName, bytes: String(text || '').length });
                 worker.postMessage({ fileName, text });
             });
         }

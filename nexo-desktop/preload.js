@@ -6,7 +6,8 @@ contextBridge.exposeInMainWorld('nexoStore', {
   patch: (partial) => ipcRenderer.invoke('store:patch', partial),
   backupNow: () => ipcRenderer.invoke('store:backupNow'),
   openDataFolder: () => ipcRenderer.invoke('app:openDataFolder'),
-  exportBackup: () => ipcRenderer.invoke('app:exportBackup')
+  exportBackup: () => ipcRenderer.invoke('app:exportBackup'),
+  importContactsChunk: (payload) => ipcRenderer.invoke('store:importContactsChunk', payload)
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {
