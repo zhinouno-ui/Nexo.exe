@@ -253,6 +253,7 @@ ipcMain.handle('store:backupNow', async () => {
   return key;
 });
 ipcMain.handle('app:openDataFolder', async () => shell.openPath(app.getPath('userData')));
+ipcMain.handle('app:getVersion', async () => app.getVersion());
 ipcMain.handle('app:exportBackup', async () => {
   const target = await dialog.showSaveDialog({
     title: 'Exportar backup de Nexo',

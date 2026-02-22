@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- saved from url=(0038)https://toolboard.vercel.app/nexo.html -->
-<html lang="es"><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/content/location/location.js" id="eppiocemhmnlbhjplcgkofciiegomcon"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/extend-native-history-api.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/requests.js"></script><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestor de Contactos Masivo</title>
@@ -1901,8 +1901,18 @@
             lastStorageWarnAt: 0,
             perfDebug: false,
             importCancelRequested: false,
-            reviewPositiveCounter: 0
+            reviewPositiveCounter: 0,
+            reviewMilestonesShown: {}
         };
+
+        function ensureReviewMilestonesState() {
+            if (!AppState.reviewMilestonesShown || typeof AppState.reviewMilestonesShown !== 'object') {
+                AppState.reviewMilestonesShown = {};
+            }
+            if (typeof AppState.reviewPositiveCounter !== 'number') {
+                AppState.reviewPositiveCounter = Number(AppState.reviewPositiveCounter || 0) || 0;
+            }
+        }
 
         const elements = {
             uploadScreen: $('#uploadScreen'),
@@ -2039,6 +2049,20 @@
             // Nota: datos de operaciones no implican disponibilidad de WhatsApp.
             // Evitamos sugerir 'sin wsp' solo por recencia.
             return 'sin revisar';
+        }
+
+        function suggestStatusByName(name) {
+            try {
+                const n = normalizeName(name || '');
+                if (!n) return 'sin revisar';
+                if (n.includes('vip') || n.includes('high roller')) return 'contactado';
+                if (n.includes('activo') || n.includes('hot') || n.includes('reciente')) return 'jugando';
+                if (n.includes('dormido') || n.includes('frio') || n.includes('cold')) return 'revisado';
+                return 'sin revisar';
+            } catch (error) {
+                console.warn('[import] suggest fallback', error);
+                return 'sin revisar';
+            }
         }
 
         function getOpsHeatLabel(lastCargaAt) {
@@ -2907,7 +2931,8 @@
                             fileMerged++;
                         }
                     } else if (newContact.name || newContact.phone) {
-                        const suggestedStatus = suggestStatusByName(newContact.name || '');
+                        let suggestedStatus = 'sin revisar';
+                        try { suggestedStatus = suggestStatusByName(newContact.name || ''); } catch (e) { console.warn('[import] sugerencia estado falló, fallback', e); }
                         const created = {
                             id: Date.now() + Math.random() + i,
                             name: newContact.name || newContact.phone,
@@ -4478,6 +4503,7 @@
 
 
         window.changeContactStatus = (id, newStatus, event, source = 'common') => {
+            try {
             if (event) event.stopPropagation();
             const contact = AppState.contacts.find(c => c.id === id);
             if (!contact) return;
@@ -4506,15 +4532,28 @@
             const policyNote = (requestedStatus !== newStatus && requestedStatus === 'sin wsp') ? ' (autopolítica 3 recontactos)' : '';
             addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`, contact.id);
             if (oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
-                AppState.reviewPositiveCounter = (AppState.reviewPositiveCounter || 0) + 1;
-                const cheers = { 25: '🔥 ¡Gran ritmo! 25 revisiones completas.', 50: '💪 ¡Excelente! Llegaste a 50 revisiones.', 100: '🚀 ¡Modo pro activado! 100 revisiones.' };
-                const msg = cheers[AppState.reviewPositiveCounter];
-                if (msg) showNotification(msg, 'success');
+                try {
+                    ensureReviewMilestonesState();
+                    AppState.reviewPositiveCounter += 1;
+                    const milestones = [100, 250, 500, 1000, 1500, 2500, 5000];
+                    const nearest = milestones.find(v => v === AppState.reviewPositiveCounter);
+                    if (nearest && !AppState.reviewMilestonesShown[nearest]) {
+                        AppState.reviewMilestonesShown[nearest] = true;
+                        const msg = `🚀 Tremendo laburo: ${nearest} usuarios revisados.`;
+                        showNotification(msg, 'success');
+                    }
+                } catch (moralErr) {
+                    console.warn('No se pudo procesar notificación motivacional:', moralErr);
+                }
             }
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
             setSaveState('pending', 'Guardando cambios...');
             saveData();
             render();
+            } catch (statusErr) {
+                console.error('Error al cambiar estado:', statusErr);
+                showNotification(`No se pudo cambiar estado: ${statusErr?.message || statusErr}`, 'error');
+            }
         };
 
         window.applyOpsSuggestion = (id, event) => {
@@ -5175,7 +5214,9 @@
             }
             if (elements.restartUpdateOption && window.electronAPI?.installUpdate) {
                 elements.restartUpdateOption.onclick = async () => {
+                    showNotification('Cerrando para instalar actualización…', 'info');
                     await window.electronAPI.installUpdate();
+                    setTimeout(() => window.close(), 120);
                 };
             }
             if (window.electronAPI?.onUpdaterStatus) {
@@ -5201,10 +5242,14 @@
                         showNotification(payload.message || 'Estás en la última versión', 'success');
                     }
                     if (status === 'downloaded') {
-                        elements.updateStatusText.textContent = payload.message || 'Actualización lista. Reiniciar ahora';
+                        elements.updateStatusText.textContent = payload.message || 'Actualización lista. Presioná Actualizar.';
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '100%';
                         elements.restartUpdateOption.style.display = 'flex';
-                        showNotification(payload.message || 'Actualización lista. Reiniciar ahora', 'success');
+                        const titleEl = elements.restartUpdateOption.querySelector('.export-option-title');
+                        const descEl = elements.restartUpdateOption.querySelector('.export-option-desc');
+                        if (titleEl) titleEl.textContent = 'Actualizar.';
+                        if (descEl) descEl.textContent = 'Cerrar e instalar actualización';
+                        showNotification(payload.message || 'Actualización lista. Presioná Actualizar.', 'success');
                     }
                     if (status === 'error') {
                         elements.updateStatusText.textContent = payload.message || 'Error de actualización';
@@ -5924,6 +5969,14 @@
         async function init() {
             try {
                 await (window.__nexoStoreReady || Promise.resolve());
+                try {
+                    const version = await window.electronAPI?.getAppVersion?.();
+                    if (version) {
+                        document.title = `Nexo Desktop v${version}`;
+                        const h1 = document.querySelector('#uploadScreen h1');
+                        if (h1) h1.textContent = `Gestor de Contactos Masivo · v${version}`;
+                    }
+                } catch (e) { console.warn('No se pudo leer versión de app', e); }
                 window.addEventListener('nexo-store-error', (event) => {
                     if (event && event.detail) showNotification(event.detail, 'warning');
                 });
@@ -5934,6 +5987,7 @@
                 loadOpsData();
                 setLoadingState(true, 'Hidratando datos…', 8, false);
                 await perfMark('init/hidratacion', async () => loadData());
+                ensureReviewMilestonesState();
                 setLoadingState(false, 'Listo', 100, false);
                 refreshStorageDiagnostics();
                 updateExportUrgencyBadge();
