@@ -1342,6 +1342,7 @@
             <div class="file-list" id="fileList"></div>
             <input type="text" id="originInput" class="origin-input" placeholder="Origen de los contactos (ej: Turno Mañana, Facebook, etc.)">
             <button id="startBtn" class="btn-primary" disabled>Comenzar</button>
+            <button id="preStartCheckUpdatesBtn" class="btn" style="margin-top:10px;"><i class="fas fa-cloud-download-alt"></i> Buscar actualizaciones antes de iniciar</button>
         </div>
     </div>
 
@@ -1911,6 +1912,7 @@
             fileList: $('#fileList'),
             originInput: $('#originInput'),
             startBtn: $('#startBtn'),
+            preStartCheckUpdatesBtn: $('#preStartCheckUpdatesBtn'),
             cardsView: $('#cardsView'),
             listView: $('#listView'),
             shiftsView: $('#shiftsView'),
@@ -2826,7 +2828,8 @@
             return parseCSV(text);
         }
 
-        async function loadFiles() {            const origin = elements.originInput.value.trim() || 'Sin especificar';
+        async function loadFiles() {
+            const origin = elements.originInput.value.trim() || 'Sin especificar';
             let totalNewContacts = 0;
             let totalMerged = 0;
 
@@ -2846,57 +2849,64 @@
                 }));
 
                 setLoadingState(true, `Integrando… ${file.name}`, 60, true);
+                const nowIso = new Date().toISOString();
+                let fileNewContacts = 0;
+                let fileMerged = 0;
+                const phoneIndex = new Map();
+                const nameIndex = new Map();
+                for (const existingContact of AppState.contacts) {
+                    const existingPhone = normalizePhoneNumber(existingContact.phone || '');
+                    if (existingPhone && !phoneIndex.has(existingPhone)) phoneIndex.set(existingPhone, existingContact);
+                    const existingName = normalizeName(existingContact.name || '');
+                    if (existingName && !nameIndex.has(existingName)) nameIndex.set(existingName, existingContact);
+                }
+
+                const integrationChunk = parsedContacts.length > 12000 ? 2200 : parsedContacts.length > 5000 ? 1400 : 900;
                 for (let i = 0; i < parsedContacts.length; i++) {
                     if (AppState.importCancelRequested) break;
                     const newContact = parsedContacts[i];
                     const normalizedName = normalizeName(newContact.name || '');
                     const normalizedPhone = normalizePhoneNumber(newContact.phone || '');
-                    let duplicateFound = false;
 
-                    for (const existingContact of AppState.contacts) {
-                        const existingName = normalizeName(existingContact.name);
-                        const existingPhone = normalizePhoneNumber(existingContact.phone || '');
-                        if (normalizedPhone && existingPhone && normalizedPhone === existingPhone) {
-                            if ((!existingContact.phone || !existingContact.phone.trim()) && normalizedPhone) {
-                                existingContact.phone = newContact.phone;
-                                existingContact.lastUpdated = new Date().toISOString();
-                                totalMerged++;
-                            }
-                            duplicateFound = true;
-                            break;
-                        }
-                        if (!duplicateFound && normalizedName && existingName === normalizedName) {
-                            if ((!existingContact.phone || !existingContact.phone.trim()) && normalizedPhone) {
-                                existingContact.phone = newContact.phone;
-                                existingContact.lastUpdated = new Date().toISOString();
-                                totalMerged++;
-                            }
-                            duplicateFound = true;
-                            break;
-                        }
-                    }
+                    const byPhone = normalizedPhone ? phoneIndex.get(normalizedPhone) : null;
+                    const byName = normalizedName ? nameIndex.get(normalizedName) : null;
+                    const existingContact = byPhone || byName || null;
 
-                    if (!duplicateFound && (newContact.name || newContact.phone)) {
+                    if (existingContact) {
+                        if ((!existingContact.phone || !existingContact.phone.trim()) && normalizedPhone) {
+                            existingContact.phone = newContact.phone;
+                            existingContact.lastUpdated = nowIso;
+                            phoneIndex.set(normalizedPhone, existingContact);
+                            totalMerged++;
+                            fileMerged++;
+                        }
+                    } else if (newContact.name || newContact.phone) {
                         const suggestedStatus = suggestStatusByName(newContact.name || '');
-                        AppState.contacts.push({
+                        const created = {
                             id: Date.now() + Math.random() + i,
                             name: newContact.name || newContact.phone,
                             phone: newContact.phone || '',
                             origin: origin,
                             status: newContact.status || suggestedStatus,
-                            lastUpdated: new Date().toISOString(),
+                            lastUpdated: nowIso,
                             isDuplicate: false
-                        });
-                        addToHistory('Contacto agregado', newContact.name || newContact.phone);
+                        };
+                        AppState.contacts.push(created);
+                        if (normalizedPhone) phoneIndex.set(normalizedPhone, created);
+                        if (normalizedName) nameIndex.set(normalizedName, created);
                         totalNewContacts++;
+                        fileNewContacts++;
                     }
 
-                    if (i % 400 === 0) {
+                    if (i % integrationChunk === 0) {
                         const base = 60 + Math.round((i / Math.max(parsedContacts.length, 1)) * 35);
-                        setLoadingState(true, `Integrando… ${i}/${parsedContacts.length}`, base, true);
+                        const etaHint = parsedContacts.length > 0 ? `Integrando… ${i}/${parsedContacts.length}` : `Integrando… ${file.name}`;
+                        setLoadingState(true, etaHint, base, true);
                         await new Promise((r) => setTimeout(r, 0));
                     }
                 }
+
+                addToHistory('Importación de archivo', `${file.name}: +${fileNewContacts} nuevos / ${fileMerged} actualizados`);
             }
 
             detectDuplicates();
@@ -2915,7 +2925,6 @@
             elements.fileInput.value = '';
             elements.fileList.innerHTML = '';
         }
-
 
 
         function importOperationsFile(file) {
@@ -5071,12 +5080,24 @@
             elements.settingsBtn.onclick = () => {
                 elements.userOptionsModal.classList.add('active');
             };
+            const triggerUpdateCheck = async (from = 'principal') => {
+                if (elements.updateStatusText) elements.updateStatusText.textContent = 'Estado: buscando…';
+                if (elements.updateProgressFill) elements.updateProgressFill.style.width = '0%';
+                showNotification(`Buscando actualizaciones (${from})…`, 'info');
+                try {
+                    await window.electronAPI.checkForUpdates();
+                } catch (error) {
+                    showNotification(`No se pudo comprobar actualizaciones: ${error?.message || error}`, 'error');
+                }
+            };
             if (elements.checkUpdatesBtn && window.electronAPI?.checkForUpdates) {
                 elements.checkUpdatesBtn.onclick = async () => {
-                    if (elements.updateStatusText) elements.updateStatusText.textContent = 'Estado: buscando…';
-                    if (elements.updateProgressFill) elements.updateProgressFill.style.width = '0%';
-                    showNotification('Buscando actualizaciones…', 'info');
-                    await window.electronAPI.checkForUpdates();
+                    await triggerUpdateCheck('panel principal');
+                };
+            }
+            if (elements.preStartCheckUpdatesBtn && window.electronAPI?.checkForUpdates) {
+                elements.preStartCheckUpdatesBtn.onclick = async () => {
+                    await triggerUpdateCheck('pantalla inicial');
                 };
             }
             if (elements.perfDebugToggle) {

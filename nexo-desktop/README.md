@@ -34,7 +34,7 @@ Ruta real obtenida con `app.getPath("userData")`.
 La app chequea updates:
 
 - al iniciar (solo en app empaquetada/instalada),
-- y manualmente desde **Ajustes → Buscar actualizaciones** (y botón visible de barra superior).
+- y manualmente desde **Ajustes → Buscar actualizaciones**, barra superior y **pantalla inicial** (antes de cargar contactos).
 
 Muestra estados:
 
@@ -53,12 +53,12 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.6`).
+1. Subir versión en `package.json` (ej. `1.1.7`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.6
-   git push origin v1.1.6
+   git tag v1.1.7
+   git push origin v1.1.7
    ```
 4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest` y genera el Release automáticamente.
 5. Verificar que el Release tenga assets:
@@ -80,7 +80,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.6`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.7`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
@@ -91,3 +91,9 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 - La base se precalienta al iniciar y queda en **cache en memoria local del proceso main** (`readDb` cacheado), reduciendo lecturas repetidas de disco.
 - El renderer usa bridge seguro (`window.nexoStore`) y los datos se persisten en `AppData` (`nexo-db.json`), no dependen del almacenamiento del navegador.
+
+
+## Integración de contactos optimizada
+
+- El proceso de importación ahora indexa por teléfono/nombre en memoria (Map) para evitar búsquedas O(n²).
+- La etapa "Integrando…" usa chunks adaptativos y cede el hilo periódicamente para que la UI no quede congelada.
