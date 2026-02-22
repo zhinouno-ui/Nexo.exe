@@ -5846,7 +5846,8 @@
 
         function csvField(value) {
             if (value === null || value === undefined) return '';
-            return String(value).replace(/?
+            return String(value).replace(/
+?
 /g, ' ').trim();
         }
 
@@ -5855,7 +5856,8 @@
                 .replace(/\/g, '\\')
                 .replace(/;/g, '\;')
                 .replace(/,/g, '\,')
-                .replace(/?
+                .replace(/
+?
 /g, '\n');
         }
 
