@@ -20,7 +20,7 @@
   "build": {
     "appId": "com.nexo.desktop",
     "productName": "Nexo",
-    "artifactName": "${productName}-${version}-${os}-${arch}-${target}.${ext}",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
       "preload.js",
@@ -29,7 +29,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "zhinouno-ui",
+        "owner": "REEMPLAZAR_OWNER",
         "repo": "Nexo.exe",
         "releaseType": "release"
       }
