@@ -15,33 +15,54 @@ const DEFAULT_DB = {
 
 let mainWindow = null;
 let currentZoomFactor = 1.0;
+let dbCache = null;
+let dbCacheLoadedAt = 0;
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
 }
 
-async function readDb() {
+async function readDb({ force = false } = {}) {
+  if (!force && dbCache) return JSON.parse(JSON.stringify(dbCache));
   const dbPath = getDbPath();
   try {
     const raw = await fs.readFile(dbPath, 'utf8');
     const parsed = JSON.parse(raw);
-    return {
+    dbCache = {
       ...DEFAULT_DB,
       ...(parsed && typeof parsed === 'object' ? parsed : {}),
       backups: parsed?.backups && typeof parsed.backups === 'object' ? parsed.backups : {},
       extraStorage: parsed?.extraStorage && typeof parsed.extraStorage === 'object' ? parsed.extraStorage : {}
     };
+    dbCacheLoadedAt = Date.now();
+    return JSON.parse(JSON.stringify(dbCache));
   } catch (error) {
-    if (error.code === 'ENOENT') return { ...DEFAULT_DB };
+    if (error.code === 'ENOENT') {
+      dbCache = { ...DEFAULT_DB };
+      dbCacheLoadedAt = Date.now();
+      return JSON.parse(JSON.stringify(dbCache));
+    }
     throw error;
   }
+}
+
+function setDbCache(data) {
+  dbCache = {
+    ...DEFAULT_DB,
+    ...(data && typeof data === 'object' ? data : {}),
+    backups: data?.backups && typeof data.backups === 'object' ? data.backups : {},
+    extraStorage: data?.extraStorage && typeof data.extraStorage === 'object' ? data.extraStorage : {}
+  };
+  dbCacheLoadedAt = Date.now();
 }
 
 async function writeDb(data) {
   const dbPath = getDbPath();
   await fs.mkdir(path.dirname(dbPath), { recursive: true });
   const tmpPath = `${dbPath}.tmp`;
-  const payload = JSON.stringify({ ...DEFAULT_DB, ...data }, null, 2);
+  const normalized = { ...DEFAULT_DB, ...data };
+  setDbCache(normalized);
+  const payload = JSON.stringify(normalized, null, 2);
   await fs.writeFile(tmpPath, payload, 'utf8');
   await fs.rename(tmpPath, dbPath);
 }
@@ -166,6 +187,7 @@ function createWindow() {
 }
 
 ipcMain.handle('store:getAll', async () => readDb());
+ipcMain.handle('store:getCacheMeta', async () => ({ cached: !!dbCache, loadedAt: dbCacheLoadedAt || null }));
 ipcMain.handle('store:setAll', async (_event, data) => {
   await queueWrite(data && typeof data === 'object' ? data : {});
   return readDb();
@@ -223,6 +245,7 @@ ipcMain.handle('updater:install', async () => {
 });
 
 app.whenReady().then(async () => {
+  try { await readDb(); } catch (error) { console.warn('No se pudo precalentar cache local:', error?.message || error); }
   createWindow();
   setupAutoUpdater();
   if (!app.isPackaged) {
