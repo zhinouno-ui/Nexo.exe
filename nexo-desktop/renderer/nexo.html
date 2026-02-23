@@ -1645,8 +1645,22 @@
                 <div class="export-option" id="openGithubReleasesOption">
                     <i class="fab fa-github"></i>
                     <div class="export-option-text">
-                        <div class="export-option-title">Descarga manual (seguro)</div>
-                        <div class="export-option-desc">Abrir Releases oficiales en GitHub</div>
+                        <div class="export-option-title">Actualización Manual</div>
+                        <div class="export-option-desc">Abrir última release oficial en GitHub</div>
+                    </div>
+                </div>
+                <div class="export-option" id="openStableReleaseOption">
+                    <i class="fas fa-shield-alt"></i>
+                    <div class="export-option-text">
+                        <div class="export-option-title">Versión Estable (v1.1.10)</div>
+                        <div class="export-option-desc">Modo pánico: abrir release estable de referencia</div>
+                    </div>
+                </div>
+                <div class="export-option" id="openPreviousReleaseOption">
+                    <i class="fas fa-history"></i>
+                    <div class="export-option-text">
+                        <div class="export-option-title">Volver a Versión Anterior</div>
+                        <div class="export-option-desc" id="previousVersionStatus">Sin versión previa registrada todavía</div>
                     </div>
                 </div>
                 <div class="export-option" id="showQuickMetricsOption">
@@ -1977,6 +1991,10 @@
             whatsappTemplateInput: $('#whatsappTemplateInput'),
             saveTemplateBtn: $('#saveTemplateBtn'),
             checkUpdatesOption: $('#checkUpdatesOption'),
+            openGithubReleasesOption: $('#openGithubReleasesOption'),
+            openStableReleaseOption: $('#openStableReleaseOption'),
+            openPreviousReleaseOption: $('#openPreviousReleaseOption'),
+            previousVersionStatus: $('#previousVersionStatus'),
             restartUpdateOption: $('#restartUpdateOption'),
             updateStatusText: $('#updateStatusText'),
             updateProgressFill: $('#updateProgressFill'),
@@ -2004,6 +2022,8 @@
         let mode = '';
 
         let selectedFiles = [];
+        const RELEASES_BASE_URL = 'https://github.com/zhinouno-ui/Nexo.exe/releases';
+        const STABLE_VERSION = '1.1.10';
 
         function normalizePhoneNumber(phone) {
             if (!phone) return '';
@@ -3191,9 +3211,7 @@
             if (!elements.saveStateBadge) return;
             elements.saveStateBadge.classList.remove('ok', 'warn', 'pending');
             elements.saveStateBadge.classList.add(type);
-            const pct = AppState.storageEstimate?.pct;
-            const suffix = Number.isFinite(pct) ? ` · Storage ${pct}%` : '';
-            elements.saveStateBadge.textContent = `● ${text}${suffix}`;
+            elements.saveStateBadge.textContent = `● ${text}`;
         }
 
         function tryStorageRecovery() {
@@ -5147,6 +5165,48 @@
             });
         }
 
+        function versionTag(version) {
+            const safe = String(version || '').replace(/^v/i, '').trim();
+            return safe ? `v${safe}` : '';
+        }
+
+        function releaseUrlForVersion(version) {
+            const tag = versionTag(version);
+            return tag ? `${RELEASES_BASE_URL}/tag/${tag}` : `${RELEASES_BASE_URL}/latest`;
+        }
+
+        function rememberInstalledVersion(version) {
+            const normalized = String(version || '').trim();
+            if (!normalized) return;
+            const currentKey = 'nexoCurrentInstalledVersion';
+            const previousKey = 'nexoPreviousInstalledVersion';
+            const storedCurrent = localStorage.getItem(currentKey);
+            if (!storedCurrent) {
+                localStorage.setItem(currentKey, normalized);
+                return;
+            }
+            if (storedCurrent !== normalized) {
+                localStorage.setItem(previousKey, storedCurrent);
+                localStorage.setItem(currentKey, normalized);
+            }
+        }
+
+        function refreshPreviousVersionStatus() {
+            if (!elements.previousVersionStatus) return;
+            const previous = localStorage.getItem('nexoPreviousInstalledVersion');
+            elements.previousVersionStatus.textContent = previous
+                ? `Versión detectada: v${String(previous).replace(/^v/i, '')}`
+                : 'Sin versión previa registrada todavía';
+        }
+
+        async function openReleaseInBrowser(url) {
+            if (window.electronAPI?.openExternal) {
+                await window.electronAPI.openExternal(url);
+                return;
+            }
+            window.open(url, '_blank');
+        }
+
         function setupEventListeners() {
             elements.uploadArea.onclick = () => elements.fileInput.click();
             elements.uploadArea.ondragover = (e) => { e.preventDefault(); elements.uploadArea.style.borderColor = 'var(--accent-primary)'; };
@@ -5298,12 +5358,33 @@
             };
             if (elements.openGithubReleasesOption) {
                 elements.openGithubReleasesOption.onclick = async () => {
-                    const url = 'https://github.com/zhinouno-ui/Nexo.exe/releases/latest';
                     try {
-                        if (window.electronAPI?.openExternal) await window.electronAPI.openExternal(url);
-                        else window.open(url, '_blank');
+                        await openReleaseInBrowser(`${RELEASES_BASE_URL}/latest`);
                     } catch (e) {
-                        showNotification('No se pudo abrir GitHub Releases', 'error');
+                        showNotification('No se pudo abrir la actualización manual', 'error');
+                    }
+                };
+            }
+            if (elements.openStableReleaseOption) {
+                elements.openStableReleaseOption.onclick = async () => {
+                    try {
+                        await openReleaseInBrowser(releaseUrlForVersion(STABLE_VERSION));
+                    } catch (e) {
+                        showNotification('No se pudo abrir la versión estable', 'error');
+                    }
+                };
+            }
+            if (elements.openPreviousReleaseOption) {
+                elements.openPreviousReleaseOption.onclick = async () => {
+                    const previous = localStorage.getItem('nexoPreviousInstalledVersion');
+                    if (!previous) {
+                        showNotification('No hay versión anterior registrada todavía.', 'warning');
+                        return;
+                    }
+                    try {
+                        await openReleaseInBrowser(releaseUrlForVersion(previous));
+                    } catch (e) {
+                        showNotification('No se pudo abrir la versión anterior', 'error');
                     }
                 };
             }
@@ -6047,6 +6128,7 @@
                 try {
                     const version = await window.electronAPI?.getAppVersion?.();
                     if (version) {
+                        rememberInstalledVersion(version);
                         document.title = `Nexo Desktop v${version}`;
                         const h1 = document.querySelector('#uploadScreen h1');
                         if (h1) h1.textContent = `Gestor de Contactos Masivo · v${version}`;
@@ -6057,6 +6139,7 @@
                 });
                 elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
                 setupEventListeners();
+                refreshPreviousVersionStatus();
                 loadHistory();
                 loadPreferences();
                 loadOpsData();
