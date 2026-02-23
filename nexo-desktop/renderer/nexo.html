@@ -5846,19 +5846,15 @@
 
         function csvField(value) {
             if (value === null || value === undefined) return '';
-            return String(value).replace(/
-?
-/g, ' ').trim();
+            return String(value).replace(/\r?\n/g, ' ').trim();
         }
 
         function vcfEscape(value) {
             return String(value || '')
-                .replace(/\/g, '\\')
-                .replace(/;/g, '\;')
-                .replace(/,/g, '\,')
-                .replace(/
-?
-/g, '\n');
+                .replace(/\\/g, '\\\\')
+                .replace(/;/g, '\\;')
+                .replace(/,/g, '\\,')
+                .replace(/\r?\n/g, '\\n');
         }
 
         function formatCsvField(value) {
