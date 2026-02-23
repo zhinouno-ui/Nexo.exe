@@ -278,14 +278,13 @@ ipcMain.handle('updater:check', async () => {
     sendUpdaterStatus('error', { message: 'Auto-update solo funciona en app instalada (NSIS), no en modo desarrollo.' });
     return { ok: false, message: 'Not packaged' };
   }
-  try {
-    await autoUpdater.checkForUpdatesAndNotify();
-    return { ok: true };
-  } catch (error) {
-    const message = error?.message || String(error);
-    sendUpdaterStatus('error', { message: `Error de actualización: ${message}` });
-    return { ok: false, message };
-  }
+  setImmediate(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      const message = error?.message || String(error);
+      sendUpdaterStatus('error', { message: `Error de actualización: ${message}` });
+    });
+  });
+  return { ok: true, started: true };
 });
 
 ipcMain.handle('updater:install', async () => {
@@ -299,10 +298,12 @@ app.whenReady().then(async () => {
   setupAutoUpdater();
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
-  } else try {
-    await autoUpdater.checkForUpdatesAndNotify();
-  } catch (error) {
-    sendUpdaterStatus('error', { message: `Error de actualización: ${error?.message || error}` });
+  } else {
+    setImmediate(() => {
+      autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+        sendUpdaterStatus('error', { message: `Error de actualización: ${error?.message || error}` });
+      });
+    });
   }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
