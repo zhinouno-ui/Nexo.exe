@@ -60,7 +60,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
    git tag v1.1.14
    git push origin v1.1.14
    ```
-4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest` y genera el Release automáticamente.
+4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest`, **sincroniza versión desde el tag** (`vX.Y.Z`) y genera el Release automáticamente.
 5. Verificar que el Release tenga assets:
    - instalador NSIS (`*.exe`)
    - `latest.yml`
@@ -69,6 +69,8 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 6. Instalar una versión anterior en las PCs y abrir app para detectar la nueva.
 
 > Importante: **subir archivos al repo (commits) NO sirve para auto-update**. `electron-updater` busca metadatos/artefactos en **GitHub Releases**.
+
+> Control de seguridad: el workflow valida que el instalador generado incluya exactamente la versión del tag; si no coincide, falla el release.
 
 ## Rendimiento / imports grandes
 

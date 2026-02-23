@@ -23,6 +23,18 @@ jobs:
           cache: npm
           cache-dependency-path: nexo-desktop/package-lock.json
 
+      - name: Sync desktop version from tag
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Invalid tag format: $tag"
+          }
+          $version = $tag.TrimStart('v')
+          Write-Host "Using version $version from tag $tag"
+          cd nexo-desktop
+          npm version $version --no-git-tag-version --allow-same-version
+
       - name: Install dependencies
         working-directory: nexo-desktop
         run: npm ci
@@ -30,6 +42,17 @@ jobs:
       - name: Build Windows NSIS
         working-directory: nexo-desktop
         run: npm run dist:win
+
+      - name: Validate artifact version matches tag
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          $expected = Get-ChildItem -Path 'nexo-desktop/dist' -Filter "*-$version-*.exe"
+          if (-not $expected) {
+            Write-Error "No .exe artifact found for version $version in nexo-desktop/dist"
+            Get-ChildItem -Path 'nexo-desktop/dist' -Filter '*.exe' | ForEach-Object { Write-Host $_.Name }
+            exit 1
+          }
 
       - name: Publish GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
