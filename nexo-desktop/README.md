@@ -53,12 +53,12 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.14`).
+1. Subir versión en `package.json` (ej. `1.1.15`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.14
-   git push origin v1.1.14
+   git tag v1.1.15
+   git push origin v1.1.15
    ```
 4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest`, **sincroniza versión desde el tag** (`vX.Y.Z`) y genera el Release automáticamente.
 5. Verificar que el Release tenga assets:
@@ -72,6 +72,8 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 > Control de seguridad: el workflow valida que el instalador generado incluya exactamente la versión del tag; si no coincide, falla el release.
 
+> El Release debe incluir sí o sí: instalador `.exe`, `latest.yml` y `*.blockmap` para que `electron-updater` funcione.
+
 ## Rendimiento / imports grandes
 
 - Parseo de contactos en **Web Worker** (`renderer/csv-worker.js`) para no bloquear UI.
@@ -82,7 +84,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.14`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.15`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
