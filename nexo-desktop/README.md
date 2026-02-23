@@ -53,12 +53,12 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.11`).
+1. Subir versión en `package.json` (ej. `1.1.12`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.11
-   git push origin v1.1.11
+   git tag v1.1.12
+   git push origin v1.1.12
    ```
 4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest` y genera el Release automáticamente.
 5. Verificar que el Release tenga assets:
@@ -80,7 +80,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.11`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.12`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
@@ -107,3 +107,4 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 - "Excel con formato" exporta `.xls` con estilos/colores y separaciones para abrir directo en Excel.
 - VCF exporta en formato vCard 3.0 real con `CRLF`, compatible para importar en celulares.
+

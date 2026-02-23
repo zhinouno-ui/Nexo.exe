@@ -5255,14 +5255,14 @@
                         showNotification(payload.message || 'Estás en la última versión', 'success');
                     }
                     if (status === 'downloaded') {
-                        elements.updateStatusText.textContent = payload.message || 'Actualización lista. Presioná Actualizar.';
+                        elements.updateStatusText.textContent = payload.message || 'Actualización lista. Reiniciar ahora';
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '100%';
                         elements.restartUpdateOption.style.display = 'flex';
                         const titleEl = elements.restartUpdateOption.querySelector('.export-option-title');
                         const descEl = elements.restartUpdateOption.querySelector('.export-option-desc');
-                        if (titleEl) titleEl.textContent = 'Actualizar.';
+                        if (titleEl) titleEl.textContent = 'Reiniciar y actualizar';
                         if (descEl) descEl.textContent = 'Cerrar e instalar actualización';
-                        showNotification(payload.message || 'Actualización lista. Presioná Actualizar.', 'success');
+                        showNotification(payload.message || 'Actualización lista. Reiniciar ahora', 'success');
                     }
                     if (status === 'error') {
                         elements.updateStatusText.textContent = payload.message || 'Error de actualización';

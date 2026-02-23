@@ -22,6 +22,7 @@ function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
 }
 
+
 async function readDb({ force = false } = {}) {
   if (!force && dbCache) return JSON.parse(JSON.stringify(dbCache));
   const dbPath = getDbPath();
@@ -286,6 +287,7 @@ ipcMain.handle('updater:check', async () => {
     return { ok: false, message };
   }
 });
+
 ipcMain.handle('updater:install', async () => {
   setImmediate(() => autoUpdater.quitAndInstall(true, true));
   return { ok: true };
