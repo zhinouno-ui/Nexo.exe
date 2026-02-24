@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const { spawn } = require('child_process');
 const fs = require('fs/promises');
+const fss = require('fs');
 const path = require('path');
 
 const DEFAULT_DB = {
@@ -17,6 +19,7 @@ let mainWindow = null;
 let currentZoomFactor = 1.0;
 let dbCache = null;
 let dbCacheLoadedAt = 0;
+let latestDownloadStats = { expectedBytes: 0, downloadedFile: '', version: '' };
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
@@ -90,6 +93,84 @@ function perfLog(scope, message, extra = {}) {
   try { console.log(`[nexo:${scope}] ${message}`, extra); } catch (_) {}
 }
 
+function getAssistedUpdaterScriptPath() {
+  return path.join(__dirname, 'scripts', 'assisted-updater.ps1');
+}
+
+async function findDownloadedInstallerPath() {
+  if (latestDownloadStats.downloadedFile) return latestDownloadStats.downloadedFile;
+  const pendingDir = path.join(app.getPath('userData'), 'pending');
+  try {
+    const files = await fs.readdir(pendingDir);
+    const candidates = files.filter((name) => /\.(exe|msi)$/i.test(name));
+    if (!candidates.length) return '';
+    const withStats = await Promise.all(candidates.map(async (name) => {
+      const filePath = path.join(pendingDir, name);
+      const stat = await fs.stat(filePath);
+      return { filePath, mtime: stat.mtimeMs };
+    }));
+    withStats.sort((a, b) => b.mtime - a.mtime);
+    return withStats[0].filePath;
+  } catch (_) {
+    return '';
+  }
+}
+
+async function verifyUpdateInstallerIntegrity() {
+  const installerPath = await findDownloadedInstallerPath();
+  if (!installerPath) throw new Error('No se encontró el instalador descargado.');
+  const stat = await fs.stat(installerPath);
+  const actualBytes = Number(stat?.size || 0);
+  const expectedBytes = Number(latestDownloadStats.expectedBytes || 0);
+
+  if (actualBytes <= 0) {
+    throw new Error('El instalador descargado está vacío (0 bytes).');
+  }
+  if (expectedBytes >= 1024 * 1024) {
+    if (actualBytes < 1024 * 1024) {
+      throw new Error(`Integridad inválida: tamaño demasiado chico (${actualBytes} bytes de ${expectedBytes} esperados).`);
+    }
+    const diffRatio = Math.abs(expectedBytes - actualBytes) / expectedBytes;
+    if (diffRatio > 0.2) {
+      throw new Error(`Integridad inválida: diferencia crítica de tamaño (${actualBytes} bytes de ${expectedBytes} esperados).`);
+    }
+  }
+  return { installerPath, actualBytes, expectedBytes };
+}
+
+async function clearUpdaterCacheInternal() {
+  const userData = app.getPath('userData');
+  const targets = [
+    path.join(userData, 'pending'),
+    path.join(userData, 'updater-cache'),
+    path.join(userData, 'Cache')
+  ];
+  await Promise.all(targets.map((target) => fs.rm(target, { recursive: true, force: true }).catch(() => {})));
+  return { ok: true };
+}
+
+function launchAssistedUpdater(installerPath, expectedBytes = 0) {
+  const scriptPath = getAssistedUpdaterScriptPath();
+  if (!fss.existsSync(scriptPath) || process.platform !== 'win32') {
+    setImmediate(() => autoUpdater.quitAndInstall(true, true));
+    return { mode: 'autoUpdaterFallback', scriptPath };
+  }
+  const child = spawn('powershell.exe', [
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', scriptPath,
+    '-InstallerPath', installerPath,
+    '-ExpectedBytes', String(Math.max(0, Number(expectedBytes || 0)))
+  ], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false
+  });
+  child.unref();
+  setImmediate(() => app.quit());
+  return { mode: 'assisted-external', scriptPath };
+}
+
 function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = false;
@@ -108,11 +189,16 @@ function setupAutoUpdater() {
     });
   });
   autoUpdater.on('download-progress', (progress) => {
+    latestDownloadStats.expectedBytes = Number(progress?.total || latestDownloadStats.expectedBytes || 0);
     sendUpdaterStatus('download-progress', {
-      percent: Math.round(progress?.percent || 0)
+      percent: Math.round(progress?.percent || 0),
+      transferred: Number(progress?.transferred || 0),
+      total: Number(progress?.total || 0)
     });
   });
   autoUpdater.on('update-downloaded', (info) => {
+    latestDownloadStats.version = info?.version || '';
+    if (info?.downloadedFile) latestDownloadStats.downloadedFile = info.downloadedFile;
     sendUpdaterStatus('downloaded', {
       version: info?.version || '',
       message: 'Actualización lista. Reiniciar ahora'
@@ -278,12 +364,25 @@ ipcMain.handle('updater:check', async () => {
     sendUpdaterStatus('error', { message: 'Auto-update solo funciona en app instalada (NSIS), no en modo desarrollo.' });
     return { ok: false, message: 'Not packaged' };
   }
+  setImmediate(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      const message = error?.message || String(error);
+      sendUpdaterStatus('error', { message: `Error de actualización: ${message}` });
+    });
+  });
+  return { ok: true, started: true };
+});
+
+ipcMain.handle('updater:clearCache', async () => clearUpdaterCacheInternal());
+
+ipcMain.handle('updater:installAssisted', async () => {
   try {
-    await autoUpdater.checkForUpdatesAndNotify();
-    return { ok: true };
+    const integrity = await verifyUpdateInstallerIntegrity();
+    const launch = launchAssistedUpdater(integrity.installerPath, integrity.expectedBytes || 0);
+    return { ok: true, launch, integrity };
   } catch (error) {
     const message = error?.message || String(error);
-    sendUpdaterStatus('error', { message: `Error de actualización: ${message}` });
+    sendUpdaterStatus('error', { message: `Instalación cancelada: ${message}` });
     return { ok: false, message };
   }
 });
@@ -299,10 +398,12 @@ app.whenReady().then(async () => {
   setupAutoUpdater();
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
-  } else try {
-    await autoUpdater.checkForUpdatesAndNotify();
-  } catch (error) {
-    sendUpdaterStatus('error', { message: `Error de actualización: ${error?.message || error}` });
+  } else {
+    setImmediate(() => {
+      autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+        sendUpdaterStatus('error', { message: `Error de actualización: ${error?.message || error}` });
+      });
+    });
   }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

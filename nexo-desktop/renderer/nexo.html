@@ -1343,6 +1343,10 @@
             <input type="text" id="originInput" class="origin-input" placeholder="Origen de los contactos (ej: Turno Mañana, Facebook, etc.)">
             <button id="startBtn" class="btn-primary" disabled>Comenzar</button>
             <button id="preStartCheckUpdatesBtn" class="btn" style="margin-top:10px;"><i class="fas fa-cloud-download-alt"></i> Buscar actualizaciones antes de iniciar</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                <button id="preStartManualUpdateBtn" class="btn" style="position:relative;z-index:2147483647;"><i class="fab fa-github"></i> Actualización Manual</button>
+                <button id="preStartStableBtn" class="btn btn-warning" style="position:relative;z-index:2147483647;"><i class="fas fa-shield-alt"></i> Versión Estable (v1.1.10)</button>
+            </div>
         </div>
     </div>
 
@@ -1516,43 +1520,30 @@
         <div class="modal-content">
             <div class="modal-header"><i class="fas fa-download"></i> Exportar Contactos</div>
             <div class="export-options">
-                <div class="export-option selected" data-type="filtered">
-                    <i class="fas fa-filter"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Exportar filtrados</div>
-                        <div class="export-option-desc"><span id="exportFilteredCount">0</span> contactos visibles</div>
-                    </div>
-                </div>
-                <div class="export-option" data-type="all">
+                <div class="export-option selected" data-type="all">
                     <i class="fas fa-users"></i>
                     <div class="export-option-text">
-                        <div class="export-option-title">Exportar todos</div>
+                        <div class="export-option-title">Exportar todos (default)</div>
                         <div class="export-option-desc"><span id="exportAllCount">0</span> contactos totales</div>
                     </div>
                 </div>
             </div>
             <div class="export-options">
-                <div class="export-option selected" data-format="excel">
-                    <i class="fas fa-file-excel"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Excel con formato</div>
-                        <div class="export-option-desc">Compatible con Excel y Google Sheets</div>
-                    </div>
-                </div>
-                <div class="export-option" data-format="vcf">
-                    <i class="fas fa-address-card"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">VCF (Contactos)</div>
-                        <div class="export-option-desc">Importable directamente a WhatsApp</div>
-                    </div>
-                </div>
-                <div class="export-option" data-format="sheet">
+                <div class="export-option selected" data-format="sheet">
                     <i class="fas fa-table"></i>
                     <div class="export-option-text">
-                        <div class="export-option-title">Formato Planilla</div>
+                        <div class="export-option-title">Formato Planilla (CSV)</div>
                         <div class="export-option-desc">Formato personalizado con columnas especiales</div>
                     </div>
                 </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">
+                    <input type="checkbox" id="exportFilteredOnlyCheckbox"> Solo filtrados (<span id="exportFilteredCount">0</span>)
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">
+                    <input type="checkbox" id="exportVcfCheckbox"> Formato VCF (opcional adicional)
+                </label>
             </div>
             <div class="modal-actions">
                 <button id="cancelExport" class="btn"><i class="fas fa-times"></i> Cancelar</button>
@@ -1645,8 +1636,22 @@
                 <div class="export-option" id="openGithubReleasesOption">
                     <i class="fab fa-github"></i>
                     <div class="export-option-text">
-                        <div class="export-option-title">Descarga manual (seguro)</div>
-                        <div class="export-option-desc">Abrir Releases oficiales en GitHub</div>
+                        <div class="export-option-title">Actualización Manual</div>
+                        <div class="export-option-desc">Abrir última release oficial en GitHub</div>
+                    </div>
+                </div>
+                <div class="export-option" id="openStableReleaseOption">
+                    <i class="fas fa-shield-alt"></i>
+                    <div class="export-option-text">
+                        <div class="export-option-title">Versión Estable (v1.1.10)</div>
+                        <div class="export-option-desc">Modo pánico: abrir release estable de referencia</div>
+                    </div>
+                </div>
+                <div class="export-option" id="openPreviousReleaseOption">
+                    <i class="fas fa-history"></i>
+                    <div class="export-option-text">
+                        <div class="export-option-title">Volver a Versión Anterior</div>
+                        <div class="export-option-desc" id="previousVersionStatus">Sin versión previa registrada todavía</div>
                     </div>
                 </div>
                 <div class="export-option" id="showQuickMetricsOption">
@@ -1937,6 +1942,8 @@
             originInput: $('#originInput'),
             startBtn: $('#startBtn'),
             preStartCheckUpdatesBtn: $('#preStartCheckUpdatesBtn'),
+            preStartManualUpdateBtn: $('#preStartManualUpdateBtn'),
+            preStartStableBtn: $('#preStartStableBtn'),
             cardsView: $('#cardsView'),
             listView: $('#listView'),
             shiftsView: $('#shiftsView'),
@@ -1977,9 +1984,15 @@
             whatsappTemplateInput: $('#whatsappTemplateInput'),
             saveTemplateBtn: $('#saveTemplateBtn'),
             checkUpdatesOption: $('#checkUpdatesOption'),
+            openGithubReleasesOption: $('#openGithubReleasesOption'),
+            openStableReleaseOption: $('#openStableReleaseOption'),
+            openPreviousReleaseOption: $('#openPreviousReleaseOption'),
+            previousVersionStatus: $('#previousVersionStatus'),
             restartUpdateOption: $('#restartUpdateOption'),
             updateStatusText: $('#updateStatusText'),
             updateProgressFill: $('#updateProgressFill'),
+            exportFilteredOnlyCheckbox: $('#exportFilteredOnlyCheckbox'),
+            exportVcfCheckbox: $('#exportVcfCheckbox'),
             perfDebugToggle: $('#perfDebugToggle'),
             appLoadingOverlay: $('#appLoadingOverlay'),
             appLoadingText: $('#appLoadingText'),
@@ -2004,6 +2017,8 @@
         let mode = '';
 
         let selectedFiles = [];
+        const RELEASES_BASE_URL = 'https://github.com/zhinouno-ui/Nexo.exe/releases';
+        const STABLE_VERSION = '1.1.10';
 
         function normalizePhoneNumber(phone) {
             if (!phone) return '';
@@ -3191,9 +3206,7 @@
             if (!elements.saveStateBadge) return;
             elements.saveStateBadge.classList.remove('ok', 'warn', 'pending');
             elements.saveStateBadge.classList.add(type);
-            const pct = AppState.storageEstimate?.pct;
-            const suffix = Number.isFinite(pct) ? ` · Storage ${pct}%` : '';
-            elements.saveStateBadge.textContent = `● ${text}${suffix}`;
+            elements.saveStateBadge.textContent = `● ${text}`;
         }
 
         function tryStorageRecovery() {
@@ -5147,6 +5160,73 @@
             });
         }
 
+        function compareSemver(a, b) {
+            const pa = String(a || '').replace(/^v/i, '').split('.').map(n => parseInt(n || '0', 10));
+            const pb = String(b || '').replace(/^v/i, '').split('.').map(n => parseInt(n || '0', 10));
+            for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+                const av = Number.isFinite(pa[i]) ? pa[i] : 0;
+                const bv = Number.isFinite(pb[i]) ? pb[i] : 0;
+                if (av > bv) return 1;
+                if (av < bv) return -1;
+            }
+            return 0;
+        }
+
+        async function handleDowngradeRecovery(currentVersion) {
+            const storedCurrent = localStorage.getItem('nexoCurrentInstalledVersion');
+            if (!storedCurrent || !currentVersion) return;
+            if (compareSemver(currentVersion, storedCurrent) < 0) {
+                try {
+                    await window.electronAPI?.clearUpdaterCache?.();
+                    showNotification(`Downgrade detectado (${storedCurrent} → ${currentVersion}). Caché de update limpiada.`, 'warning');
+                } catch (e) {
+                    console.warn('No se pudo limpiar caché del updater tras downgrade', e);
+                }
+            }
+        }
+
+        function versionTag(version) {
+            const safe = String(version || '').replace(/^v/i, '').trim();
+            return safe ? `v${safe}` : '';
+        }
+
+        function releaseUrlForVersion(version) {
+            const tag = versionTag(version);
+            return tag ? `${RELEASES_BASE_URL}/tag/${tag}` : `${RELEASES_BASE_URL}/latest`;
+        }
+
+        function rememberInstalledVersion(version) {
+            const normalized = String(version || '').trim();
+            if (!normalized) return;
+            const currentKey = 'nexoCurrentInstalledVersion';
+            const previousKey = 'nexoPreviousInstalledVersion';
+            const storedCurrent = localStorage.getItem(currentKey);
+            if (!storedCurrent) {
+                localStorage.setItem(currentKey, normalized);
+                return;
+            }
+            if (storedCurrent !== normalized) {
+                localStorage.setItem(previousKey, storedCurrent);
+                localStorage.setItem(currentKey, normalized);
+            }
+        }
+
+        function refreshPreviousVersionStatus() {
+            if (!elements.previousVersionStatus) return;
+            const previous = localStorage.getItem('nexoPreviousInstalledVersion');
+            elements.previousVersionStatus.textContent = previous
+                ? `Versión detectada: v${String(previous).replace(/^v/i, '')}`
+                : 'Sin versión previa registrada todavía';
+        }
+
+        async function openReleaseInBrowser(url) {
+            if (window.electronAPI?.openExternal) {
+                await window.electronAPI.openExternal(url);
+                return;
+            }
+            window.open(url, '_blank');
+        }
+
         function setupEventListeners() {
             elements.uploadArea.onclick = () => elements.fileInput.click();
             elements.uploadArea.ondragover = (e) => { e.preventDefault(); elements.uploadArea.style.borderColor = 'var(--accent-primary)'; };
@@ -5208,6 +5288,24 @@
                     await triggerUpdateCheck('pantalla inicial');
                 };
             }
+            if (elements.preStartManualUpdateBtn) {
+                elements.preStartManualUpdateBtn.onclick = async () => {
+                    try {
+                        await openReleaseInBrowser(`${RELEASES_BASE_URL}/latest`);
+                    } catch (e) {
+                        showNotification('No se pudo abrir actualización manual', 'error');
+                    }
+                };
+            }
+            if (elements.preStartStableBtn) {
+                elements.preStartStableBtn.onclick = async () => {
+                    try {
+                        await openReleaseInBrowser(releaseUrlForVersion(STABLE_VERSION));
+                    } catch (e) {
+                        showNotification('No se pudo abrir versión estable', 'error');
+                    }
+                };
+            }
             if (elements.perfDebugToggle) {
                 elements.perfDebugToggle.checked = localStorage.getItem('perfDebugMode') === '1';
                 AppState.perfDebug = elements.perfDebugToggle.checked;
@@ -5227,8 +5325,9 @@
             }
             if (elements.restartUpdateOption && window.electronAPI?.installUpdate) {
                 elements.restartUpdateOption.onclick = async () => {
-                    showNotification('Cerrando para instalar actualización…', 'info');
-                    await window.electronAPI.installUpdate();
+                    setLoadingState(true, 'Preparando archivos...', 15, false);
+                    showNotification('Preparando actualización asistida…', 'info');
+                    await window.electronAPI.installAssistedUpdate();
                     setTimeout(() => window.close(), 120);
                 };
             }
@@ -5298,12 +5397,33 @@
             };
             if (elements.openGithubReleasesOption) {
                 elements.openGithubReleasesOption.onclick = async () => {
-                    const url = 'https://github.com/zhinouno-ui/Nexo.exe/releases/latest';
                     try {
-                        if (window.electronAPI?.openExternal) await window.electronAPI.openExternal(url);
-                        else window.open(url, '_blank');
+                        await openReleaseInBrowser(`${RELEASES_BASE_URL}/latest`);
                     } catch (e) {
-                        showNotification('No se pudo abrir GitHub Releases', 'error');
+                        showNotification('No se pudo abrir la actualización manual', 'error');
+                    }
+                };
+            }
+            if (elements.openStableReleaseOption) {
+                elements.openStableReleaseOption.onclick = async () => {
+                    try {
+                        await openReleaseInBrowser(releaseUrlForVersion(STABLE_VERSION));
+                    } catch (e) {
+                        showNotification('No se pudo abrir la versión estable', 'error');
+                    }
+                };
+            }
+            if (elements.openPreviousReleaseOption) {
+                elements.openPreviousReleaseOption.onclick = async () => {
+                    const previous = localStorage.getItem('nexoPreviousInstalledVersion');
+                    if (!previous) {
+                        showNotification('No hay versión anterior registrada todavía.', 'warning');
+                        return;
+                    }
+                    try {
+                        await openReleaseInBrowser(releaseUrlForVersion(previous));
+                    } catch (e) {
+                        showNotification('No se pudo abrir la versión anterior', 'error');
                     }
                 };
             }
@@ -5699,31 +5819,25 @@
             $('#exportBtn').onclick = () => {
                 $('#exportFilteredCount').textContent = `${AppState.filteredContacts.length} contactos`;
                 $('#exportAllCount').textContent = `${AppState.contacts.length} contactos`;
+                if (elements.exportFilteredOnlyCheckbox) elements.exportFilteredOnlyCheckbox.checked = false;
+                if (elements.exportVcfCheckbox) elements.exportVcfCheckbox.checked = false;
                 $('#exportModal').classList.add('active');
             };
 
             $('#cancelExport').onclick = () => $('#exportModal').classList.remove('active');
 
             $('#confirmExport').onclick = () => {
-                const type = $('#exportModal .export-option[data-type].selected').dataset.type;
-                const format = $('#exportModal .export-option[data-format].selected').dataset.format;
-                const contactsToExport = type === 'all' ? AppState.contacts : AppState.filteredContacts;
-                
-                if (format === 'excel') exportToExcel(contactsToExport);
-                else if (format === 'vcf') exportToVCF(contactsToExport);
-                else if (format === 'sheet') exportToSheetFormat(AppState.contacts);
+                const filteredOnly = !!elements.exportFilteredOnlyCheckbox?.checked;
+                const exportVcf = !!elements.exportVcfCheckbox?.checked;
+                const contactsToExport = filteredOnly ? AppState.filteredContacts : AppState.contacts;
+
+                exportToSheetFormat(contactsToExport);
+                if (exportVcf) exportToVCF(contactsToExport);
 
                 localStorage.setItem('lastExportAt', new Date().toISOString());
                 updateExportUrgencyBadge();
                 $('#exportModal').classList.remove('active');
             };
-
-            $$('#exportModal .export-option').forEach(opt => opt.onclick = (e) => {
-                const option = e.target.closest('.export-option');
-                const group = option.dataset.type ? '[data-type]' : '[data-format]';
-                $$(`#exportModal .export-option${group}`).forEach(o => o.classList.remove('selected'));
-                option.classList.add('selected');
-            });
 
             elements.manageDuplicatesBtn.onclick = showDuplicatesModal;
             $('#closeDuplicatesModal').onclick = () => $('#duplicatesModal').classList.remove('active');
@@ -6047,6 +6161,8 @@
                 try {
                     const version = await window.electronAPI?.getAppVersion?.();
                     if (version) {
+                        await handleDowngradeRecovery(version);
+                        rememberInstalledVersion(version);
                         document.title = `Nexo Desktop v${version}`;
                         const h1 = document.querySelector('#uploadScreen h1');
                         if (h1) h1.textContent = `Gestor de Contactos Masivo · v${version}`;
@@ -6057,6 +6173,7 @@
                 });
                 elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
                 setupEventListeners();
+                refreshPreviousVersionStatus();
                 loadHistory();
                 loadPreferences();
                 loadOpsData();
