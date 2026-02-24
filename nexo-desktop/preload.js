@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   installUpdate: () => ipcRenderer.invoke('updater:install'),
+  installAssistedUpdate: () => ipcRenderer.invoke('updater:installAssisted'),
+  clearUpdaterCache: () => ipcRenderer.invoke('updater:clearCache'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   zoomIn: () => ipcRenderer.invoke('zoom:in'),
   zoomOut: () => ipcRenderer.invoke('zoom:out'),

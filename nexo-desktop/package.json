@@ -1,6 +1,6 @@
 {
   "name": "nexo-desktop",
-  "version": "1.1.10",
+  "version": "1.1.12-beta.1",
   "description": "Nexo desktop app built with Electron",
   "main": "main.js",
   "author": "",
@@ -24,7 +24,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "renderer/**/*"
+      "renderer/**/*",
+      "scripts/**/*"
     ],
     "publish": [
       {
