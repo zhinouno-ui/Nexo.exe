@@ -1,0 +1,116 @@
+name: Release Nexo Desktop
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag de release (ej: v1.1.15)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $tag = '${{ inputs.tag }}'
+          } else {
+            $tag = '${{ github.ref_name }}'
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Invalid tag format: $tag"
+          }
+          $version = $tag.TrimStart('v')
+          "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Release tag: $tag"
+          Write-Host "Release version: $version"
+
+      - name: Checkout tag for manual dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: pwsh
+        run: |
+          git fetch --tags --force
+          git checkout "tags/$env:RELEASE_TAG"
+
+      - name: Setup Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: nexo-desktop/package-lock.json
+
+      - name: Sync desktop version from tag
+        shell: pwsh
+        working-directory: nexo-desktop
+        run: |
+          npm version $env:RELEASE_VERSION --no-git-tag-version --allow-same-version
+          Write-Host "Desktop package version synced to $env:RELEASE_VERSION"
+
+      - name: Install dependencies
+        working-directory: nexo-desktop
+        run: npm ci
+
+      - name: Clean dist
+        shell: pwsh
+        run: |
+          if (Test-Path 'nexo-desktop/dist') { Remove-Item -Recurse -Force 'nexo-desktop/dist' }
+
+      - name: Build Windows NSIS
+        working-directory: nexo-desktop
+        run: npm run dist:win
+
+      - name: Validate updater artifacts and version
+        shell: pwsh
+        run: |
+          $dist = 'nexo-desktop/dist'
+          if (-not (Test-Path $dist)) { throw "dist folder not found" }
+
+          $exe = Get-ChildItem -Path $dist -Filter "*-$env:RELEASE_VERSION-*.exe"
+          if (-not $exe) {
+            Write-Error "No .exe artifact found for version $env:RELEASE_VERSION"
+            Get-ChildItem -Path $dist -Filter '*.exe' | ForEach-Object { Write-Host $_.Name }
+            exit 1
+          }
+
+          $latest = Join-Path $dist 'latest.yml'
+          if (-not (Test-Path $latest)) { throw "latest.yml missing in dist" }
+
+          $blockmaps = Get-ChildItem -Path $dist -Filter '*.blockmap'
+          if (-not $blockmaps) { throw "No .blockmap artifacts found in dist" }
+
+          $latestContent = Get-Content -Raw $latest
+          if ($latestContent -notmatch "version:\s*$env:RELEASE_VERSION") {
+            Write-Error "latest.yml version does not match tag version $env:RELEASE_VERSION"
+            Write-Host $latestContent
+            exit 1
+          }
+
+          Write-Host 'Artifacts validated:'
+          Get-ChildItem -Path $dist | ForEach-Object { Write-Host $_.Name }
+
+      - name: Publish GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Nexo ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          files: |
+            nexo-desktop/dist/*.exe
+            nexo-desktop/dist/*.yml
+            nexo-desktop/dist/*.blockmap
