@@ -1,8 +1,8 @@
 version: 1.1.12
 files:
   - url: Nexo-1.1.12-win-x64.exe
-    sha512: PFjwrOhJtr6tQBFh9jr/i1C5x4NUcoQurRfDSuSHPRnyMuVrqxX8h5lrvSU3VnL4xIUpR35SWSuGmPiPW+dgLw==
+    sha256: 538e22298ad21986163e32ae920f91a8a69040e89e047319a8a57d191dec3bf6
     size: 78626884
 path: Nexo-1.1.12-win-x64.exe
-sha512: PFjwrOhJtr6tQBFh9jr/i1C5x4NUcoQurRfDSuSHPRnyMuVrqxX8h5lrvSU3VnL4xIUpR35SWSuGmPiPW+dgLw==
+sha256: 538e22298ad21986163e32ae920f91a8a69040e89e047319a8a57d191dec3bf6
 releaseDate: '2026-02-25T11:35:26.094Z'
