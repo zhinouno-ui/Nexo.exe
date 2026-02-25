@@ -1534,14 +1534,14 @@
         <div class="modal-content">
             <div class="modal-header"><i class="fas fa-download"></i> Exportar Contactos</div>
             <div class="export-options">
-                <div class="export-option selected" data-type="filtered">
+                <div class="export-option" data-type="filtered">
                     <i class="fas fa-filter"></i>
                     <div class="export-option-text">
                         <div class="export-option-title">Exportar filtrados</div>
                         <div class="export-option-desc"><span id="exportFilteredCount">0</span> contactos visibles</div>
                     </div>
                 </div>
-                <div class="export-option" data-type="all">
+                <div class="export-option selected" data-type="all">
                     <i class="fas fa-users"></i>
                     <div class="export-option-text">
                         <div class="export-option-title">Exportar todos</div>
@@ -1550,13 +1550,6 @@
                 </div>
             </div>
             <div class="export-options">
-                <div class="export-option selected" data-format="excel">
-                    <i class="fas fa-file-excel"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Excel con formato</div>
-                        <div class="export-option-desc">Compatible con Excel y Google Sheets</div>
-                    </div>
-                </div>
                 <div class="export-option" data-format="vcf">
                     <i class="fas fa-address-card"></i>
                     <div class="export-option-text">
@@ -1564,7 +1557,7 @@
                         <div class="export-option-desc">Importable directamente a WhatsApp</div>
                     </div>
                 </div>
-                <div class="export-option" data-format="sheet">
+                <div class="export-option selected" data-format="sheet">
                     <i class="fas fa-table"></i>
                     <div class="export-option-text">
                         <div class="export-option-title">Formato Planilla</div>
@@ -5852,13 +5845,19 @@
             $('#cancelExport').onclick = () => $('#exportModal').classList.remove('active');
 
             $('#confirmExport').onclick = () => {
-                const type = $('#exportModal .export-option[data-type].selected').dataset.type;
-                const format = $('#exportModal .export-option[data-format].selected').dataset.format;
-                const contactsToExport = type === 'all' ? AppState.contacts : AppState.filteredContacts;
-                
-                if (format === 'excel') exportToExcel(contactsToExport);
-                else if (format === 'vcf') exportToVCF(contactsToExport);
-                else if (format === 'sheet') exportToSheetFormat(AppState.contacts);
+                const selectedTypeEl = $('#exportModal .export-option[data-type].selected');
+                const selectedFormatEl = $('#exportModal .export-option[data-format].selected');
+                const type = selectedTypeEl ? selectedTypeEl.dataset.type : 'all';
+                const format = selectedFormatEl ? selectedFormatEl.dataset.format : 'sheet';
+                const contactsToExport = type === 'filtered' ? AppState.filteredContacts : AppState.contacts;
+
+                if (!contactsToExport.length) {
+                    showNotification('No hay contactos para exportar', 'warning');
+                    return;
+                }
+
+                if (format === 'vcf') exportToVCF(contactsToExport);
+                else exportToSheetFormat(contactsToExport);
 
                 localStorage.setItem('lastExportAt', new Date().toISOString());
                 updateExportUrgencyBadge();
@@ -6011,53 +6010,6 @@
                 return `"${stringValue.replace(/"/g, '""')}"`;
             }
             return `"${stringValue}"`;
-        }
-        
-        function exportToExcel(contacts) {
-            const statusColor = {
-                'sin revisar': '#3b82f6',
-                'contactado': '#10b981',
-                'revisado': '#eab308',
-                'jugando': '#8b5cf6',
-                'sin wsp': '#ef4444',
-                'no interesado': '#6b7280'
-            };
-            const rows = contacts.map(c => {
-                const st = String(c.status || 'sin revisar').toLowerCase();
-                const bg = statusColor[st] || '#334155';
-                return `<tr>
-                    <td>${csvField(c.name)}</td>
-                    <td>${csvField(c.phone)}</td>
-                    <td>${csvField(c.origin)}</td>
-                    <td style="background:${bg};color:#fff;font-weight:700;">${csvField(c.status)}</td>
-                    <td>${csvField(c.cargas ?? '')}</td>
-                    <td>${csvField(c.descargas ?? '')}</td>
-                    <td>${csvField(c.neto ?? '')}</td>
-                    <td>${csvField(c.score ?? '')}</td>
-                    <td>${csvField(c.lealtad ?? '')}</td>
-                    <td>${csvField(new Date(c.lastUpdated || Date.now()).toLocaleString('es-ES'))}</td>
-                </tr>`;
-            }).join('');
-
-            const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-                body{font-family:Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0}
-                table{border-collapse:collapse;width:100%}
-                th,td{border:1px solid #94a3b8;padding:6px 8px;font-size:12px}
-                th{background:#1e293b;color:#f8fafc;position:sticky;top:0}
-                tr:nth-child(even) td{background:#0b1220;color:#e2e8f0}
-                tr:nth-child(odd) td{background:#111827;color:#e2e8f0}
-                .meta{margin:8px 0 12px;color:#94a3b8}
-            </style></head><body>
-
-                <h2>Nexo Export (${contacts.length} contactos)</h2>
-                <div class="meta">Generado: ${new Date().toLocaleString('es-ES')}</div>
-                <table><thead><tr>
-                    <th>Nombre</th><th>Teléfono</th><th>Origen</th><th>Estado</th><th>Cargas</th><th>Descargas</th><th>Neto</th><th>Score</th><th>Lealtad</th><th>Última actualización</th>
-                </tr></thead><tbody>${rows}</tbody></table>
-            </body></html>`;
-
-            downloadFile(html, `contactos_${new Date().toISOString().split('T')[0]}.xls`, 'application/vnd.ms-excel;charset=utf-8;');
-            showNotification('Exportación Excel con formato completada', 'success');
         }
 
         function exportToVCF(contacts) {

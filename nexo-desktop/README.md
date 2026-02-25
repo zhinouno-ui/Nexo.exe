@@ -53,12 +53,12 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.16`).
+1. Subir versión en `package.json` (ej. `1.1.12`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.16
-   git push origin v1.1.16
+   git tag v1.1.12
+   git push origin v1.1.12
    ```
 4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest`, **sincroniza versión desde el tag** (`vX.Y.Z`) y genera el Release automáticamente.
 5. Verificar que el Release tenga assets:
@@ -84,7 +84,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.16`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.12`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
@@ -109,7 +109,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Exportación mejorada
 
-- "Excel con formato" exporta `.xls` con estilos/colores y separaciones para abrir directo en Excel.
+- Se eliminó la exportación XLS para simplificar el flujo y evitar errores de formato.
 - VCF exporta en formato vCard 3.0 real con `CRLF`, compatible para importar en celulares.
 
 
@@ -120,3 +120,17 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 - Desde Ajustes podés intentar `Volver a versión anterior` (usa instalador cacheado local).
 - Log de errores en `AppData\Roaming\Nexo\nexo-error.log`.
 - Se bloquea instalación automática cuando un instalador pesa menos de 10MB o más de 500MB (requiere confirmación manual para forzar).
+
+## Checklist del pedido anterior (estado actual)
+
+Resumen: **8/8 implementadas** y reforzadas en esta base.
+
+- [x] Log de errores completo (main + renderer + crashes + unhandled).
+- [x] Guardado de instaladores previos para rollback local.
+- [x] Botón de rollback en Ajustes.
+- [x] Botón de downgrade manual a release estable 1.1.10 en Ajustes.
+- [x] Botón failsafe de downgrade fuera del flujo JS principal en pantalla inicial.
+- [x] Verificador de update sospechosa por tamaño (`<10MB` o `>500MB`) con confirmación para forzar.
+- [x] Limpieza de duplicación visual de storage en estado de guardado.
+- [x] Refuerzo de origen: en reimportación de contacto existente se actualiza al origen nuevo y se registra historial de origen por usuario.
+
