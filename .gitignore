@@ -1,0 +1,6 @@
+node_modules/
+*.rar
+nexo-desktop/dist/win-unpacked/
+nexo-desktop/node_modules/
+dist/win-unpacked/
+electron.exe

@@ -1,0 +1,25 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.nexo.desktop
+productName: Nexo
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+files:
+  - filter:
+      - main.js
+      - preload.js
+      - renderer/**/*
+publish:
+  - provider: github
+    owner: zhinouno-ui
+    repo: Nexo.exe
+    releaseType: release
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+electronVersion: 31.7.7
